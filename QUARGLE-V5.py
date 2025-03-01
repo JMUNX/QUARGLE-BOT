@@ -132,7 +132,7 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
-    await ctx.send("debug test", delete_after=1)
+    await ctx.send("Shitpost debug", delete_after=1)
 
 
 @bot.command()
