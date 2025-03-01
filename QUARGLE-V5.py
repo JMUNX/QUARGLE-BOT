@@ -26,10 +26,7 @@ logger = logging.getLogger(__name__)
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
-print("test2")
-print("test2")
-print("test3")
-print("test4")
+print("testing-testing2222")
 
 
 # notes: Asynchronously loads text files into lists, used for preloading meme and other sources
