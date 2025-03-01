@@ -17,6 +17,7 @@ import aiofiles
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
+import time
 
 # Configure logging for debugging and performance tracking
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
-print("10:30 Test")
 
 
 # notes: Asynchronously loads text files into lists, used for preloading meme and other sources
@@ -84,7 +84,8 @@ async def check_permissions(ctx, permission):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...")
+    await ctx.send("Bot is prepping for updates...", delete_after=2)
+    time.sleep(5)
     await bot.close()
 
 
