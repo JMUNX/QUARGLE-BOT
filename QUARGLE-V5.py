@@ -64,9 +64,8 @@ executor = ThreadPoolExecutor(max_workers=4)
 # notes: Logs when the bot is online and ready to accept commands
 @bot.event
 async def on_ready():
-    channel_id = 1345184113623040051  # Replace with your channel ID
+    channel_id = 656690392049385484  # Replace with your channel ID
     channel = bot.get_channel(channel_id)
-    # Create an embed object
     embed = discord.Embed(
         title="Quargle Update Alert",
         description="Greetings, users! Quargle has been successfully activated. Update #42069 is now live.",
