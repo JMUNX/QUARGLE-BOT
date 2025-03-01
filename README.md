@@ -1,1 +1,1 @@
-Custom server bot with openAI API
+Custom server bot QUARGLE
