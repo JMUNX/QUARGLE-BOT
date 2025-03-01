@@ -82,13 +82,6 @@ async def check_permissions(ctx, permission):
     return True
 
 
-@bot.command()
-async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=1)
-    await time.sleep(5)
-    await bot.close()
-
-
 # notes: Clears a specified number of messages in the channel (capped at 100), requires manage_messages permission
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -135,6 +128,18 @@ async def clear_error(ctx, error):
         await ctx.send(
             "You need Manage Messages permission to use this command!", delete_after=2
         )
+
+
+@bot.command()
+async def debug(ctx):
+    await ctx.send("debug", delete_after=1)
+
+
+@bot.command()
+async def update(ctx):
+    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await time.sleep(5)
+    await bot.close()
 
 
 # notes: Fetches and displays a user's profile picture as an embed, defaults to command issuer if no member specified
