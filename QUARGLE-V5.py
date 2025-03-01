@@ -64,19 +64,18 @@ executor = ThreadPoolExecutor(max_workers=4)
 # notes: Logs when the bot is online and ready to accept commands
 @bot.event
 async def on_ready():
-    channel_id = 1345184113623040051  # Replace with your channel ID
+    print(f"Bot is online as {bot.user.name}")
+    channel_id = 1345184113623040051
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
         title="Quargle Update Alert",
         description="Greetings, users! Quargle has been successfully activated. Update #42069 is now live.",
         color=discord.Color.green(),
     )
-    file = discord.File(
-        "https://media1.tenor.com/m/_mX0c3gT8icAAAAd/tweaking-wegeekinghard.gif",
-        file="quargle.gif",
+    embed.set_image(
+        url="https://media1.tenor.com/m/_mX0c3gT8icAAAAd/tweaking-wegeekinghard.gif"
     )
-    embed.set_image(url="attachment://quargle.gif")
-    channel.send(file=file, embed=embed)
+    await channel.send(embed=embed)
 
 
 # notes: Sets up the HTTP session and executor when the bot starts, ensuring async resources are ready
