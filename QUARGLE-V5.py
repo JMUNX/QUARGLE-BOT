@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
-print("10:15 Test")
+print("10:23 Test")
 
 
 # notes: Asynchronously loads text files into lists, used for preloading meme and other sources
@@ -80,6 +80,12 @@ async def check_permissions(ctx, permission):
         await ctx.send("You lack permission!", delete_after=2)
         return False
     return True
+
+
+@bot.command()
+async def update(ctx):
+    await ctx.send("Bot is prepping for updates...")
+    await bot.close()
 
 
 # notes: Clears a specified number of messages in the channel (capped at 100), requires manage_messages permission
