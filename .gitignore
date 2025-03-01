@@ -1,6 +1,11 @@
-*.txt
+*.ENV
 *.exe
 *.mp4
 *.jpg
 *.png
-*.ENV
+*.txt
+*.jpeg
+*.mov
+*.webp
+*.gif
+*.json
