@@ -64,7 +64,20 @@ executor = ThreadPoolExecutor(max_workers=4)
 # notes: Logs when the bot is online and ready to accept commands
 @bot.event
 async def on_ready():
-    logger.info("'QUARGLE' initialized.")
+    channel_id = 1345184113623040051  # Replace with your channel ID
+    channel = bot.get_channel(channel_id)
+    # Create an embed object
+    embed = discord.Embed(
+        title="Quargle Update Alert",
+        description="Greetings, users! Quargle has been successfully activated. Update #42069 is now live.",
+        color=discord.Color.green(),
+    )
+    file = discord.File(
+        "https://media1.tenor.com/m/_mX0c3gT8icAAAAd/tweaking-wegeekinghard.gif",
+        filename="quargle.gif",
+    )
+    embed.set_image(url="attachment://quargle.gif")
+    channel.send(file=file, embed=embed)
 
 
 # notes: Sets up the HTTP session and executor when the bot starts, ensuring async resources are ready
@@ -132,7 +145,7 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
-    await ctx.send("I FUCKING WIN DEBUG!", delete_after=1)
+    await ctx.send("I FUCKING WIN DEBUG!", delete_after=5)
 
 
 @bot.command()
