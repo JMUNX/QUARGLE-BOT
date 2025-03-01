@@ -65,7 +65,7 @@ executor = ThreadPoolExecutor(max_workers=4)
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name}")
-    channel_id = 1345184113623040051
+    channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
         title="Quargle Update Alert",
