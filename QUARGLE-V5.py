@@ -28,6 +28,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
 print("test2")
 print("test2")
+print("test3")
 
 
 # notes: Asynchronously loads text files into lists, used for preloading meme and other sources
