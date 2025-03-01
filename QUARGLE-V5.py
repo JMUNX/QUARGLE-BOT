@@ -84,8 +84,8 @@ async def check_permissions(ctx, permission):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=2)
-    time.sleep(5)
+    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await time.sleep(5)
     await bot.close()
 
 
