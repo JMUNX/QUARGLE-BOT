@@ -64,7 +64,7 @@ executor = ThreadPoolExecutor(max_workers=4)
 # notes: Logs when the bot is online and ready to accept commands
 @bot.event
 async def on_ready():
-    channel_id = 656690392049385484  # Replace with your channel ID
+    channel_id = 1345184113623040051  # Replace with your channel ID
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
         title="Quargle Update Alert",
@@ -73,7 +73,7 @@ async def on_ready():
     )
     file = discord.File(
         "https://media1.tenor.com/m/_mX0c3gT8icAAAAd/tweaking-wegeekinghard.gif",
-        filename="quargle.gif",
+        file="quargle.gif",
     )
     embed.set_image(url="attachment://quargle.gif")
     channel.send(file=file, embed=embed)
