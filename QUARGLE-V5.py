@@ -137,8 +137,11 @@ async def debug(ctx):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=1)
-    await time.sleep(5)
+    message = await ctx.send(
+        "Bot is prepping for updates... <a:4704loadingicon:1246520222844977252>",
+        delete_after=4,
+    )
+    await asyncio.sleep(5)  # Ensures the message is deleted before closing
     await bot.close()
 
 
