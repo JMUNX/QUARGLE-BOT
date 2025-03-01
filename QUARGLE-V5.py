@@ -143,13 +143,13 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
-    await ctx.send("test69", delete_after=5)
+    await ctx.send("536am 3/1/25 test", delete_after=5)
 
 
 @bot.command()
 async def update(ctx):
     message = await ctx.send(
-        "Bot is prepping for updates... <a:4704loadingicon:1246520222844977252>",
+        "Bot is prepping for updates...",
         delete_after=4,
     )
     await asyncio.sleep(5)  # Ensures the message is deleted before closing
