@@ -144,7 +144,7 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
-    await ctx.send("I FUCKING WIN DEBUG!", delete_after=5)
+    await ctx.send("test69", delete_after=5)
 
 
 @bot.command()
