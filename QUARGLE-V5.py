@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Version 69.420.1
-load_dotenv("\\Bot-Discord\\API_TOKENS\\TOKENS.env")
+load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
 print("test2")
