@@ -357,20 +357,40 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx):
-    # Log the raw message content and attachment count for debugging
+    # Log the raw message for debugging
     logger.info(
-        f"Message content: {ctx.message.content}, Attachments: {len(ctx.message.attachments)}"
+        f"Command message content: {ctx.message.content}, Attachments: {len(ctx.message.attachments)}"
     )
 
     command_attachments = ctx.message.attachments
     ref_attachments = []
 
-    # Check if this is a reply and fetch referenced message attachments
+    # Check if this is a reply and fetch referenced message
     if ctx.message.reference:
         try:
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            logger.info(
+                f"Referenced message content: {ref_msg.content}, Attachments: {len(ref_msg.attachments)}"
+            )
             ref_attachments = ref_msg.attachments
-            logger.info(f"Referenced message attachments: {len(ref_attachments)}")
+
+            # If no attachments, check for GIF URLs in the referenced message content
+            if not ref_attachments and ref_msg.content:
+                urls = [
+                    word
+                    for word in ref_msg.content.split()
+                    if word.lower().endswith(".gif")
+                ]
+                if urls:
+                    logger.info(f"Found GIF URLs in referenced message: {urls}")
+                    # Treat each URL as a pseudo-attachment
+                    ref_attachments = [
+                        discord.Attachment(
+                            data={"url": url, "filename": url.split("/")[-1]},
+                            state=None,
+                        )
+                        for url in urls
+                    ]
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
             await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
@@ -395,10 +415,9 @@ async def upload(ctx):
 
 async def save_attachment(attachment, session, directory):
     try:
-        logger.info(
-            f"Processing attachment: {attachment.filename}, URL: {attachment.url}"
-        )
-        async with session.get(attachment.url) as resp:
+        url = attachment.url
+        logger.info(f"Processing attachment: {attachment.filename}, URL: {url}")
+        async with session.get(url) as resp:
             if resp.status == 200:
                 os.makedirs(directory, exist_ok=True)
                 filename = os.path.join(directory, attachment.filename)
