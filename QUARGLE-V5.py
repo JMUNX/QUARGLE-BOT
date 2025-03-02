@@ -390,20 +390,28 @@ async def QUARGLE(ctx, *, inputText: str):
         original_message = ""
         original_author = ""
 
+    role = next((r.name for r in ctx.author.roles if r.name != "@everyone"), "Member")
+    context = user_preferences.get(
+        user_id, ""
+    )  # Always get latest user-defined context
+
+    system_msg = {
+        "role": "system",
+        "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
+    }
+
+    # Initialize or update conversation history
     if user_id not in conversation_history:
-        role = next(
-            (r.name for r in ctx.author.roles if r.name != "@everyone"), "Member"
-        )
-        context = user_preferences.get(user_id, "")
-        system_msg = {
-            "role": "system",
-            "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
-        }
         conversation_history[user_id] = [system_msg]
         logger.debug(
             f"Initialized conversation history for user {user_id} with context: {context}"
         )
+    else:
+        # Ensure the system message is always the first entry in history
+        conversation_history[user_id][0] = system_msg
+        logger.debug(f"Updated system message for user {user_id}: {context}")
 
+    # Include reply reference if applicable
     conversation_input = inputText
     if original_message:
         conversation_input = f"{inputText}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
@@ -411,7 +419,9 @@ async def QUARGLE(ctx, *, inputText: str):
     conversation_history[user_id].append(
         {"role": "user", "content": conversation_input}
     )
-    conversation_history[user_id] = conversation_history[user_id][-10:]
+    conversation_history[user_id] = conversation_history[user_id][
+        -10:
+    ]  # Keep last 10 messages for memory efficiency
     logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
 
     try:
