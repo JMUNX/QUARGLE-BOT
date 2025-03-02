@@ -373,7 +373,7 @@ async def upload(ctx):
         return
 
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session, "OurMemes") for att in all_attachments]
+        tasks = [save_attachment(att, session, "ourMemes") for att in all_attachments]
         await asyncio.gather(*tasks)
 
     num_files = len(tasks)
@@ -381,6 +381,14 @@ async def upload(ctx):
         await ctx.send("1 file uploaded", delete_after=10)
     else:
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
+
+
+async def save_attachment(attachment, session, directory):
+    async with session.get(attachment.url) as resp:
+        if resp.status == 200:
+            filename = os.path.join(directory, attachment.filename)
+            async with aiofiles.open(filename, "wb") as f:
+                await f.write(await resp.read())
 
 
 @bot.command()
