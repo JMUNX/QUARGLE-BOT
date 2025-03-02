@@ -357,69 +357,28 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx):
-    # Log the raw message for debugging
-    logger.info(
-        f"Command message content: {ctx.message.content}, Attachments: {len(ctx.message.attachments)}"
-    )
-
     command_attachments = ctx.message.attachments
-    ref_attachments = []
+    ref_urls = []
 
-    # Check if this is a reply and fetch referenced message
+    # Check if this is a reply and extract GIF URLs from the referenced message
     if ctx.message.reference:
-        try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            logger.info(
-                f"Referenced message fetched - ID: {ref_msg.id}, Content: {ref_msg.content}, Attachments: {len(ref_msg.attachments)}"
-            )
-            ref_attachments = ref_msg.attachments
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        ref_urls = [
+            word for word in ref_msg.content.split() if word.lower().endswith(".gif")
+        ]
 
-            # If no attachments, check for GIF URLs in the referenced message content
-            if not ref_attachments and ref_msg.content:
-                urls = [
-                    word
-                    for word in ref_msg.content.split()
-                    if word.lower().endswith(".gif")
-                ]
-                if urls:
-                    logger.info(f"Found GIF URLs in referenced message: {urls}")
-                    ref_attachments = [
-                        discord.Attachment(
-                            data={"url": url, "filename": url.split("/")[-1]},
-                            state=None,
-                        )
-                        for url in urls
-                    ]
-        except discord.NotFound:
-            logger.error(
-                f"Referenced message not found: {ctx.message.reference.message_id}"
-            )
-            await ctx.send(
-                "The referenced message was deleted or not found.", delete_after=4
-            )
-        except discord.Forbidden:
-            logger.error(
-                f"Missing permissions to fetch message: {ctx.message.reference.message_id}"
-            )
-            await ctx.send(
-                "I don’t have permission to view the referenced message.",
-                delete_after=4,
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error fetching referenced message {ctx.message.reference.message_id}: {e}"
-            )
-            await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
+    # Combine attachments and URLs into a single list for processing
+    all_items = command_attachments + [
+        type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
+        for url in ref_urls
+    ]
 
-    all_attachments = command_attachments + ref_attachments
-    logger.info(f"Total attachments found: {len(all_attachments)}")
-
-    if not all_attachments:
-        await ctx.send("No attachments found to upload!", delete_after=4)
+    if not all_items:
+        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
 
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session, "OurMemes") for att in all_attachments]
+        tasks = [save_attachment(item, session, "OurMemes") for item in all_items]
         await asyncio.gather(*tasks)
 
     num_files = len(tasks)
@@ -429,24 +388,12 @@ async def upload(ctx):
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
-async def save_attachment(attachment, session, directory):
-    try:
-        url = attachment.url
-        logger.info(f"Processing attachment: {attachment.filename}, URL: {url}")
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                os.makedirs(directory, exist_ok=True)
-                filename = os.path.join(directory, attachment.filename)
-                async with aiofiles.open(filename, "wb") as f:
-                    content = await resp.read()
-                    await f.write(content)
-                logger.info(f"Saved {filename}")
-            else:
-                logger.error(
-                    f"Failed to download {attachment.filename}: HTTP {resp.status}"
-                )
-    except Exception as e:
-        logger.error(f"Error saving attachment {attachment.filename}: {e}")
+async def save_attachment(item, session, directory):
+    async with session.get(item.url) as resp:
+        if resp.status == 200:
+            filename = os.path.join(directory, item.filename)
+            async with aiofiles.open(filename, "wb") as f:
+                await f.write(await resp.read())
 
 
 @bot.command()
