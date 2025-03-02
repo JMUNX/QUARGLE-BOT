@@ -75,7 +75,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.12"
+        version = "69.420.15"
         embed = discord.Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -122,7 +122,7 @@ def load_conversation_history(user_id):
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     history = []
-    for line in lines[-20:]:  # Load last 10 lines
+    for line in lines[-20:]:  # Load last 20 lines
         if ": " in line:
             role, content = line.split(": ", 1)
             history.append({"role": role.strip(), "content": content.strip()})
@@ -458,12 +458,12 @@ async def QUARGLE(ctx, *, inputText: str):
     append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
 
-    # Construct API history: system message + last 9 entries (max 10 total)
+    # Construct API history: system message + last 20 entries (max 20 total)
     system_msg = {
         "role": "system",
         "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
     }
-    api_history = [system_msg] + conversation_history[-9:]
+    api_history = [system_msg] + conversation_history[-20:]
 
     thinking_message = await ctx.send("Thinking...")
     try:
@@ -546,17 +546,18 @@ COLORS = {
 
 @bot.command(name="help")
 async def help_command(ctx):
-    pages = [
-        Embed(
+    pages = []
+    for i, (cat, cmds) in enumerate(COMMAND_CATEGORIES.items()):
+        embed = Embed(
             title=f"QUARGLE-HELP - {cat}",
             color=COLORS.get(cat, discord.Color.blue()),
             description=f"Commands for {cat.lower()}.",
         )
-        .add_field(name=f".{cmd}", value=desc, inline=False)
-        .set_footer(text=f"Page {i+1}/{len(COMMAND_CATEGORIES)} | Prefix: .")
-        for i, (cat, cmds) in enumerate(COMMAND_CATEGORIES.items())
-        for cmd, desc in cmds.items()
-    ]
+        for cmd, desc in cmds.items():
+            embed.add_field(name=f".{cmd}", value=desc, inline=False)
+        embed.set_footer(text=f"Page {i+1}/{len(COMMAND_CATEGORIES)} | Prefix: .")
+        pages.append(embed)
+
     current_page = 0
     message = await ctx.send(embed=pages[current_page])
     await message.add_reaction("⬅️")
