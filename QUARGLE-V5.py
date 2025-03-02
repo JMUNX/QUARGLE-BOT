@@ -392,6 +392,70 @@ async def setcontext(ctx, *, new_context: str):
     await ctx.send(f"Context updated: {new_context}")
 
 
+import os
+import logging
+import asyncio
+import openai
+from discord.ext import commands
+from profanity_filter import ProfanityFilter
+
+# Bot setup
+bot = commands.Bot(command_prefix="!")
+logger = logging.getLogger(__name__)
+profanity = ProfanityFilter()
+user_preferences = {}  # Assuming this exists elsewhere
+BOT_IDENTITY = "Your bot's identity string"
+
+# Directory for conversation history
+HISTORY_DIR = "Conversation_History"
+os.makedirs(HISTORY_DIR, exist_ok=True)  # Create folder if it doesn’t exist
+
+
+def get_history_file(user_id):
+    return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
+
+
+def load_conversation_history(user_id):
+    """Load last 10 messages from user's history file."""
+    file_path = get_history_file(user_id)
+    if not os.path.exists(file_path):
+        return []
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    # Parse lines into message dicts; assume format "role: content\n"
+    history = []
+    for line in lines[-10:]:  # Only take last 10 messages
+        if ": " in line:
+            role, content = line.split(": ", 1)
+            history.append({"role": role.strip(), "content": content.strip()})
+    return history
+
+
+def append_to_conversation_history(user_id, role, content):
+    """Append a message to the user's history file."""
+    file_path = get_history_file(user_id)
+    with open(file_path, "a", encoding="utf-8") as f:
+        f.write(f"{role}: {content}\n")
+
+
+def check_history_limit(user_id):
+    """Check if history exceeds 400 lines; return True if limit reached."""
+    file_path = get_history_file(user_id)
+    if not os.path.exists(file_path):
+        return False
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    return len(lines) >= 400
+
+
+def reset_conversation_history(user_id):
+    """Overwrite the user's history file with an empty file."""
+    file_path = get_history_file(user_id)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write("")
+
+
 @bot.command()
 async def QUARGLE(ctx, *, inputText: str):
     user_id = ctx.author.id
@@ -399,7 +463,7 @@ async def QUARGLE(ctx, *, inputText: str):
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
     )
 
-    # Profanity filter check - silently censor if needed
+    # Profanity filter - silently censor
     sanitized_input = (
         profanity.censor(inputText)
         if profanity.contains_profanity(inputText)
@@ -420,43 +484,49 @@ async def QUARGLE(ctx, *, inputText: str):
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
 
-    # Get user role (excluding @everyone)
+    # Get user role
     role = next((r.name for r in ctx.author.roles if r.name != "@everyone"), "Member")
-    context = user_preferences.get(user_id, "")  # Latest user-defined context
+    context = user_preferences.get(user_id, "")
 
+    # Check and handle history limit
+    if check_history_limit(user_id):
+        reset_conversation_history(user_id)
+        await ctx.send(
+            "Conversation history reached limit, generating new history file"
+        )
+
+    # Load or initialize conversation history
     system_msg = {
         "role": "system",
         "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
     }
+    conversation_history = load_conversation_history(user_id)
+    if not conversation_history or conversation_history[0] != system_msg:
+        conversation_history.insert(0, system_msg)
+        with open(
+            get_history_file(user_id), "w", encoding="utf-8"
+        ) as f:  # Rewrite with updated system msg
+            f.write(f"system: {system_msg['content']}\n")
+            for msg in conversation_history[1:]:
+                f.write(f"{msg['role']}: {msg['content']}\n")
 
-    # Initialize or update conversation history
-    if user_id not in conversation_history:
-        conversation_history[user_id] = [system_msg]
-        logger.debug(
-            f"Initialized conversation history for user {user_id} with context: {context}"
-        )
-    else:
-        conversation_history[user_id][0] = system_msg
-        logger.debug(f"Updated system message for user {user_id}: {context}")
-
-    # Build conversation input with reply context if applicable
+    # Build conversation input
     conversation_input = sanitized_input
     if original_message:
         conversation_input = f"{sanitized_input}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
 
-    conversation_history[user_id].append(
-        {"role": "user", "content": conversation_input}
-    )
-    conversation_history[user_id] = conversation_history[user_id][
-        -10:
-    ]  # Limit to last 10 messages
-    logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
+    # Append user message to file and history
+    append_to_conversation_history(user_id, "user", conversation_input)
+    conversation_history.append({"role": "user", "content": conversation_input})
+    conversation_history = conversation_history[-10:]  # Keep last 10 in memory
+
+    logger.debug(f"Conversation history for user {user_id}: {conversation_history}")
 
     # Send "thinking..." message
     thinking_message = await ctx.send("Thinking...")
 
     try:
-        # Ensure API key is set
+        # Ensure API key
         openai.api_key = OPENAI_GPT_TOKEN
         # Call OpenAI API
         loop = asyncio.get_event_loop()
@@ -464,15 +534,14 @@ async def QUARGLE(ctx, *, inputText: str):
             None,
             lambda: openai.chat.completions.create(
                 model="gpt-4o",
-                messages=conversation_history[user_id],
+                messages=conversation_history,
             ),
         )
         logger.debug(f"OpenAI API response: {response}")
 
         bot_response = response.choices[0].message.content
-        conversation_history[user_id].append(
-            {"role": "assistant", "content": bot_response}
-        )
+        append_to_conversation_history(user_id, "assistant", bot_response)
+        conversation_history.append({"role": "assistant", "content": bot_response})
         logger.debug(f"Sending response: {bot_response}")
 
         # Delete "thinking..." and send response
@@ -499,11 +568,14 @@ async def QUARGLE(ctx, *, inputText: str):
             "An unexpected error occurred. Check logs for details.", delete_after=10
         )
     finally:
-        # Ensure "thinking..." is cleaned up even on error
         try:
             await thinking_message.delete()
         except Exception:
-            pass  # Ignore if already deleted
+            pass
+
+
+# Run the bot (add your token here)
+# bot.run("YOUR_DISCORD_TOKEN")
 
 
 # notes: Generates an image using DALL-E 3 based on user input and displays it as an embed
