@@ -367,7 +367,9 @@ user_preferences = {}
 # Command to set context
 @bot.command()
 async def setcontext(ctx, *, new_context: str):
-    user_preferences[ctx.author.id] = new_context
+    user_id = ctx.author.id
+    user_preferences[user_id] = new_context
+    logger.debug(f"Set context for user {user_id} to: {new_context}")
     await ctx.send(f"Context updated: {new_context}")
 
 
@@ -383,12 +385,15 @@ async def QUARGLE(ctx, *, inputText: str):
         role = next(
             (r.name for r in ctx.author.roles if r.name != "@everyone"), "Member"
         )
+        context = user_preferences.get(user_id, "")
         system_msg = {
             "role": "system",
-            "content": f"{BOT_IDENTITY} Assisting a {role}. {user_preferences.get(user_id, '')}",
+            "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
         }
         conversation_history[user_id] = [system_msg]
-        logger.debug(f"Initialized conversation history for user {user_id}")
+        logger.debug(
+            f"Initialized conversation history for user {user_id} with context: {context}"
+        )
 
     conversation_history[user_id].append({"role": "user", "content": inputText})
     conversation_history[user_id] = conversation_history[user_id][-10:]
