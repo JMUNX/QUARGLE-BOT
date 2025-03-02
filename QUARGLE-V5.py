@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 from better_profanity import Profanity
 
-# Configure logging
+# Bot Configuration and Setup
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -26,7 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
@@ -35,16 +34,14 @@ if not BOT_TOKEN or not OPENAI_GPT_TOKEN:
     logger.critical("Missing BOT_TOKEN or OPENAI_GPT_TOKEN in TOKENS.env")
     exit(1)
 
-# Bot setup with intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 bot = commands.Bot(
     command_prefix=".", intents=intents, case_insensitive=True, max_messages=1000
 )
-bot.remove_command("help")  # Remove default help
+bot.remove_command("help")
 
-# Global resources
 executor = ThreadPoolExecutor(max_workers=4)
 profanity = Profanity()
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
@@ -57,24 +54,9 @@ os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
 
 
-# Preload sources
-async def load_file(filename):
-    try:
-        async with aiofiles.open(filename, "r", encoding="utf-8") as file:
-            return [line.strip() async for line in file if line.strip()]
-    except FileNotFoundError:
-        logger.error(f"File not found: {filename}")
-        return []
-
-
-async def preload_sources():
-    return {
-        "memeSources": await load_file("memeSources.txt"),
-    }
-
-
-# Bot events
+# Bot Lifecycle Events
 @bot.event
+# Handles bot startup and announcement
 async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
@@ -91,6 +73,7 @@ async def on_ready():
 
 
 @bot.event
+# Sets up bot resources on startup
 async def setup_hook():
     bot.http_session = aiohttp.ClientSession()
     bot.executor = executor
@@ -98,6 +81,7 @@ async def setup_hook():
     bot.memeSources = bot.sources["memeSources"]
 
 
+# Closes bot resources on shutdown
 async def close():
     if hasattr(bot, "http_session") and not bot.http_session.closed:
         await bot.http_session.close()
@@ -107,22 +91,35 @@ async def close():
 bot.on_close = close
 
 
-# Utility functions
-async def check_permissions(ctx, permission):
-    if not getattr(ctx.author.guild_permissions, permission, False):
-        await ctx.send("You lack permission!", delete_after=2)
-        return False
-    return True
+# File and Data Management Functions
+# Loads lines from a file asynchronously
+async def load_file(filename):
+    try:
+        async with aiofiles.open(filename, "r", encoding="utf-8") as file:
+            return [line.strip() async for line in file if line.strip()]
+    except FileNotFoundError:
+        logger.error(f"File not found: {filename}")
+        return []
 
 
+# Preloads meme sources from file
+async def preload_sources():
+    return {
+        "memeSources": await load_file("memeSources.txt"),
+    }
+
+
+# Returns path to user’s conversation history file
 def get_history_file(user_id):
     return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
 
 
+# Returns path to user’s saved messages file
 def get_saved_messages_file(user_id):
     return os.path.join(SAVED_MESSAGES_DIR, f"user_{user_id}.json")
 
 
+# Loads recent conversation history for a user
 async def load_conversation_history(user_id):
     file_path = get_history_file(user_id)
     if not os.path.exists(file_path):
@@ -140,6 +137,7 @@ async def load_conversation_history(user_id):
     return history
 
 
+# Appends a message to user’s conversation history
 async def append_to_conversation_history(user_id, role, content):
     file_path = get_history_file(user_id)
     message = {"role": role, "content": content}
@@ -147,6 +145,7 @@ async def append_to_conversation_history(user_id, role, content):
         await f.write(f"{json.dumps(message)}\n")
 
 
+# Writes a system message to user’s history file
 async def write_system_message(user_id, content):
     file_path = get_history_file(user_id)
     system_msg = {"role": "system", "content": content}
@@ -154,9 +153,39 @@ async def write_system_message(user_id, content):
         await f.write(f"{json.dumps(system_msg)}\n")
 
 
-# Commands
+# Utility Functions
+# Checks if user has a specific permission
+async def check_permissions(ctx, permission):
+    if not getattr(ctx.author.guild_permissions, permission, False):
+        await ctx.send("You lack permission!", delete_after=2)
+        return False
+    return True
+
+
+# Cleans up messages after a delay
+async def cleanup_messages(command_msg, preview_msg):
+    await asyncio.sleep(30)
+    try:
+        await command_msg.delete()
+        await preview_msg.delete()
+    except Exception as e:
+        logger.debug(f"Failed to delete preview messages: {e}")
+
+
+# Media Handling Functions
+# Saves an attachment or URL to a directory
+async def save_attachment(item, session, directory):
+    async with session.get(item.url) as resp:
+        if resp.status == 200:
+            filename = os.path.join(directory, item.filename)
+            async with aiofiles.open(filename, "wb") as f:
+                await f.write(await resp.read())
+
+
+# Utility Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
+# Deletes a specified number of messages
 async def clear(ctx, amount: int):
     if amount > 200:
         await ctx.send("I WON'T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
@@ -167,92 +196,20 @@ async def clear(ctx, amount: int):
 
 
 @clear.error
+# Handles permission errors for clear command
 async def clear_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You need Manage Messages permission!", delete_after=2)
 
 
 @bot.command()
+# Sends a debug message
 async def debug(ctx):
     await ctx.send("Debug", delete_after=5)
 
 
 @bot.command()
-async def freak(ctx):
-    await ctx.message.delete(delay=1)
-    target = (
-        ctx.message.reference
-        and (await ctx.channel.fetch_message(ctx.message.reference.message_id)).author
-    )
-    mention = target.mention if target else "nobody in particular"
-    channel = bot.get_channel(656690392049385484)
-    if channel:
-        embed = discord.Embed(
-            title="😈freak mode activated😈",
-            description=f"Im gonna touch you, {mention}",
-            color=discord.Color.red(),
-        )
-        embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
-        await channel.send(embed=embed, delete_after=45)
-
-
-@bot.command()
-async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=1)
-    await asyncio.sleep(2)
-    await bot.close()
-
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def clearhistory(ctx):
-    logger.info(
-        f"Clearhistory command invoked by {ctx.author.name} (ID: {ctx.author.id})"
-    )
-    history_dir = HISTORY_DIR
-
-    if not os.path.exists(history_dir):
-        await ctx.send("No conversation history directory found!", delete_after=5)
-        logger.warning(f"Directory {history_dir} does not exist")
-        return
-
-    files_deleted = 0
-    try:
-        for filename in os.listdir(history_dir):
-            file_path = os.path.join(history_dir, filename)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                files_deleted += 1
-                logger.debug(f"Deleted file: {file_path}")
-        if files_deleted > 0:
-            await ctx.send(
-                f"Cleared {files_deleted} conversation history file(s)!", delete_after=5
-            )
-            logger.info(
-                f"Successfully deleted {files_deleted} files from {history_dir}"
-            )
-        else:
-            await ctx.send("No conversation history files to clear!", delete_after=5)
-            logger.info(f"No files found in {history_dir} to delete")
-    except Exception as e:
-        logger.error(f"Error clearing history: {e}")
-        await ctx.send(
-            "An error occurred while clearing the conversation history.", delete_after=5
-        )
-
-
-@clearhistory.error
-async def clearhistory_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send(
-            "You need Administrator permissions to use this command!", delete_after=5
-        )
-        logger.warning(
-            f"{ctx.author.name} (ID: {ctx.author.id}) attempted clearhistory without admin perms"
-        )
-
-
-@bot.command()
+# Displays a user’s profile picture
 async def getpfp(ctx, member: Member = None):
     member = member or ctx.author
     embed = Embed(title=str(member), url=member.display_avatar.url)
@@ -261,6 +218,7 @@ async def getpfp(ctx, member: Member = None):
 
 
 @bot.command()
+# Fetches and displays weather forecast for a city
 async def weather(ctx, *, city=""):
     if not city:
         await ctx.send("City is missing", delete_after=1)
@@ -281,7 +239,29 @@ async def weather(ctx, *, city=""):
             await ctx.send("Failed to fetch weather data.", delete_after=2)
 
 
+# Memes and Fun Commands
 @bot.command()
+# Sends a freaky message to a specific channel
+async def freak(ctx):
+    await ctx.message.delete(delay=1)
+    target = (
+        ctx.message.reference
+        and (await ctx.channel.fetch_message(ctx.message.reference.message_id)).author
+    )
+    mention = target.mention if target else "nobody in particular"
+    channel = bot.get_channel(656690392049385484)
+    if channel:
+        embed = discord.Embed(
+            title="😈freak mode activated😈",
+            description=f"Im gonna touch you, {mention}",
+            color=discord.Color.red(),
+        )
+        embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
+        await channel.send(embed=embed, delete_after=45)
+
+
+@bot.command()
+# Fetches and posts a random Reddit meme
 async def meme(ctx):
     await ctx.message.delete(delay=1)
     embed = Embed()
@@ -315,6 +295,7 @@ async def meme(ctx):
 
 
 @bot.command()
+# Replies with a GIF based on a referenced message
 async def reaction(ctx):
     await ctx.message.delete(delay=1)
     if not ctx.message.reference:
@@ -324,7 +305,6 @@ async def reaction(ctx):
     original_message = ref_msg.content
     username = ref_msg.author.name
     embed = Embed()
-
     replacements = {"cunt": "jerk", "nazi": "creep", "retard": "goof"}
     words = original_message.split()
     sanitized_message = [
@@ -336,7 +316,6 @@ async def reaction(ctx):
         for word in words
     ]
     sanitized_message = " ".join(sanitized_message)
-
     search_term = urllib.parse.quote(sanitized_message)
     tenor_url = f"https://tenor.com/search/{search_term}-gifs"
     async with bot.http_session as session:
@@ -356,31 +335,25 @@ async def reaction(ctx):
 
 
 @bot.command()
+# Uploads attachments or GIF URLs to OurMemes directory
 async def upload(ctx):
     command_attachments = ctx.message.attachments
     ref_urls = []
-
-    # Check if this is a reply and extract GIF URLs from the referenced message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         ref_urls = [
             word for word in ref_msg.content.split() if word.lower().endswith(".gif")
         ]
-
-    # Combine attachments and URLs into a single list for processing
     all_items = command_attachments + [
         type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
         for url in ref_urls
     ]
-
     if not all_items:
         await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
-
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, "OurMemes") for item in all_items]
         await asyncio.gather(*tasks)
-
     num_files = len(tasks)
     if num_files == 1:
         await ctx.send("1 file uploaded", delete_after=10)
@@ -388,40 +361,26 @@ async def upload(ctx):
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
-async def save_attachment(item, session, directory):
-    async with session.get(item.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join(directory, item.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
-
-
 @bot.command()
+# Uploads attachments or GIF URLs to Saves directory
 async def save(ctx):
     command_attachments = ctx.message.attachments
     ref_urls = []
-
-    # Check if this is a reply and extract GIF URLs from the referenced message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         ref_urls = [
             word for word in ref_msg.content.split() if word.lower().endswith(".gif")
         ]
-
-    # Combine attachments and URLs into a single list for processing
     all_items = command_attachments + [
         type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
         for url in ref_urls
     ]
-
     if not all_items:
         await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
-
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, "Saves") for item in all_items]
         await asyncio.gather(*tasks)
-
     num_files = len(tasks)
     if num_files == 1:
         await ctx.send("1 file uploaded", delete_after=10)
@@ -429,15 +388,8 @@ async def save(ctx):
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
-async def save_attachment(item, session, directory):
-    async with session.get(item.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join(directory, item.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
-
-
 @bot.command()
+# Shares a random meme from OurMemes directory
 async def ourmeme(ctx, media_type: str = None):
     valid_exts = {"image": (".png", ".jpg", ".gif"), "video": (".mp4", ".mov", ".mkv")}
     exts = valid_exts.get(
@@ -461,59 +413,9 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
+# AI Feature Commands
 @bot.command()
-async def view(ctx, directory="OurMemes"):
-    # Validate directory
-    valid_dirs = ["Saves", "OurMemes"]
-    if directory not in valid_dirs:
-        await ctx.send(
-            f"Invalid directory! Use one of: {', '.join(valid_dirs)}", delete_after=4
-        )
-        return
-
-    # Get list of image files
-    image_extensions = (".png", ".jpg", ".jpeg", ".gif", ".bmp")
-    files = [f for f in os.listdir(directory) if f.lower().endswith(image_extensions)]
-
-    if not files:
-        await ctx.send(f"No images found in {directory}!", delete_after=4)
-        return
-
-    # Send thumbnails as attachments and create a selection menu
-    message_content = "Select an image to send by replying with its number:\n"
-    attachments = []
-    for i, file in enumerate(files[:10]):  # Limit to 10 files to avoid Discord limits
-        file_path = os.path.join(directory, file)
-        attachments.append(discord.File(file_path, filename=file))
-        message_content += f"{i + 1}. {file}\n"
-
-    preview_msg = await ctx.send(content=message_content, files=attachments)
-
-    # Wait for user response
-    def check(m):
-        return (
-            m.author == ctx.author
-            and m.channel == ctx.channel
-            and m.reference
-            and m.reference.message_id == preview_msg.id
-        )
-
-    try:
-        response = await bot.wait_for("message", timeout=30.0, check=check)
-        choice = int(response.content) - 1
-        if 0 <= choice < len(files[:10]):
-            selected_file = files[choice]
-            file_path = os.path.join(directory, selected_file)
-            await ctx.send(file=discord.File(file_path, filename=selected_file))
-        else:
-            await ctx.send("Invalid selection!", delete_after=4)
-    except asyncio.TimeoutError:
-        await ctx.send("Selection timed out!", delete_after=4)
-    except ValueError:
-        await ctx.send("Please reply with a valid number!", delete_after=4)
-
-
-@bot.command()
+# Sets custom context for AI responses
 async def setcontext(ctx, *, new_context: str):
     user_id = ctx.author.id
     user_preferences[user_id] = new_context
@@ -522,6 +424,7 @@ async def setcontext(ctx, *, new_context: str):
 
 
 @bot.command()
+# Chats with QUARGLE AI using OpenAI
 async def QUARGLE(ctx, *, inputText: str):
     openai.api_key = OPENAI_GPT_TOKEN
     user_id = ctx.author.id
@@ -533,7 +436,6 @@ async def QUARGLE(ctx, *, inputText: str):
         if profanity.contains_profanity(inputText)
         else inputText
     )
-
     original_message = ""
     original_author = ""
     if ctx.message.reference:
@@ -543,13 +445,10 @@ async def QUARGLE(ctx, *, inputText: str):
             original_author = ref_msg.author.name
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
-
     username = ctx.author.name
     context = user_preferences.get(user_id, "")
-
     file_path = get_history_file(user_id)
     conversation_history = await load_conversation_history(user_id)
-
     if not os.path.exists(file_path) or not conversation_history:
         system_msg = {
             "role": "system",
@@ -557,7 +456,6 @@ async def QUARGLE(ctx, *, inputText: str):
         }
         await write_system_message(user_id, system_msg["content"])
         conversation_history = [system_msg]
-
     conversation_input = sanitized_input
     if original_message:
         conversation_input = (
@@ -565,13 +463,11 @@ async def QUARGLE(ctx, *, inputText: str):
         )
     await append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
-
     system_msg = {
         "role": "system",
         "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
     }
     api_history = [system_msg] + conversation_history[-20:]
-
     thinking_message = await ctx.send("Thinking...")
     try:
         response = await bot.loop.run_in_executor(
@@ -596,6 +492,7 @@ async def QUARGLE(ctx, *, inputText: str):
 
 
 @bot.command()
+# Generates an image using DALL-E 3
 async def imagine(ctx, *, inputText: str):
     loading_msg = await ctx.send("Processing...", delete_after=1)
     try:
@@ -618,22 +515,78 @@ async def imagine(ctx, *, inputText: str):
         await ctx.send("Failed to generate image.", delete_after=2)
 
 
+# Admin Commands
 @bot.command()
+# Shuts down bot for updates
+async def update(ctx):
+    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await asyncio.sleep(2)
+    await bot.close()
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+# Clears all conversation history files
+async def clearhistory(ctx):
+    logger.info(
+        f"Clearhistory command invoked by {ctx.author.name} (ID: {ctx.author.id})"
+    )
+    history_dir = HISTORY_DIR
+    if not os.path.exists(history_dir):
+        await ctx.send("No conversation history directory found!", delete_after=5)
+        logger.warning(f"Directory {history_dir} does not exist")
+        return
+    files_deleted = 0
+    try:
+        for filename in os.listdir(history_dir):
+            file_path = os.path.join(history_dir, filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                files_deleted += 1
+                logger.debug(f"Deleted file: {file_path}")
+        if files_deleted > 0:
+            await ctx.send(
+                f"Cleared {files_deleted} conversation history file(s)!", delete_after=5
+            )
+            logger.info(
+                f"Successfully deleted {files_deleted} files from {history_dir}"
+            )
+        else:
+            await ctx.send("No conversation history files to clear!", delete_after=5)
+            logger.info(f"No files found in {history_dir} to delete")
+    except Exception as e:
+        logger.error(f"Error clearing history: {e}")
+        await ctx.send(
+            "An error occurred while clearing the conversation history.", delete_after=5
+        )
+
+
+@clearhistory.error
+# Handles permission errors for clearhistory command
+async def clearhistory_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send(
+            "You need Administrator permissions to use this command!", delete_after=5
+        )
+        logger.warning(
+            f"{ctx.author.name} (ID: {ctx.author.id}) attempted clearhistory without admin perms"
+        )
+
+
+# Message Management Commands
+@bot.command()
+# Saves a referenced message to a JSON file
 async def savemessage(ctx):
     if not ctx.message.reference:
         await ctx.send("Please reply to a message to save it!", delete_after=5)
         return
-
     ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
     user_id = ref_msg.author.id
     username = ref_msg.author.name
     content = ref_msg.content
     timestamp = ref_msg.created_at.isoformat()
-
     file_path = get_saved_messages_file(user_id)
     messages = []
-
-    # Load existing messages if file exists
     if os.path.exists(file_path):
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             try:
@@ -641,31 +594,23 @@ async def savemessage(ctx):
             except json.JSONDecodeError:
                 logger.error(f"Corrupted JSON file for user {user_id}, resetting.")
                 messages = []
-
-    # Append new message
     messages.append({"content": content, "timestamp": timestamp})
-
-    # Limit to 20 messages, removing oldest if necessary
     if len(messages) > 20:
         messages = messages[-20:]
-
-    # Save updated messages
     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
         await f.write(json.dumps(messages, indent=2))
-
     await ctx.send(f"Saved message from {username}!", delete_after=5)
     await ctx.message.delete(delay=1)
 
 
 @bot.command()
+# Lists or retrieves saved messages for a user
 async def mentionmessage(ctx, member: Member, message_number: int = None):
     user_id = member.id
     file_path = get_saved_messages_file(user_id)
-
     if not os.path.exists(file_path):
         await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
         return
-
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         try:
             messages = json.loads(await f.read())
@@ -673,13 +618,10 @@ async def mentionmessage(ctx, member: Member, message_number: int = None):
             logger.error(f"Corrupted JSON file for user {user_id}.")
             await ctx.send("Error reading saved messages!", delete_after=5)
             return
-
     if not messages:
         await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
         return
-
     if message_number is None:
-        # Show preview of all messages
         embed = Embed(
             title=f"Saved Messages for {member.name}",
             color=discord.Color.gold(),
@@ -691,17 +633,13 @@ async def mentionmessage(ctx, member: Member, message_number: int = None):
                 name=f"{i}. {msg['timestamp']}", value=preview, inline=False
             )
         preview_msg = await ctx.send(embed=embed)
-
-        # Store the preview message ID for later deletion
         bot.loop.create_task(cleanup_messages(ctx.message, preview_msg))
     else:
-        # Retrieve specific message
         if not 1 <= message_number <= len(messages):
             await ctx.send(
                 f"Invalid message number! Use 1 to {len(messages)}.", delete_after=5
             )
             return
-
         selected_msg = messages[message_number - 1]
         embed = Embed(
             title=f"Message from {member.name}",
@@ -713,16 +651,7 @@ async def mentionmessage(ctx, member: Member, message_number: int = None):
         await ctx.message.delete(delay=1)
 
 
-async def cleanup_messages(command_msg, preview_msg):
-    await asyncio.sleep(30)  # Wait 30 seconds for user to select
-    try:
-        await command_msg.delete()
-        await preview_msg.delete()
-    except Exception as e:
-        logger.debug(f"Failed to delete preview messages: {e}")
-
-
-# Help menu
+# Help Menu
 COMMAND_CATEGORIES = {
     "Utilities": {
         "clear": "Clears up to 100 messages (Manage Messages required)",
@@ -761,6 +690,7 @@ COLORS = {
 
 
 @bot.command(name="help")
+# Displays an interactive help menu
 async def help_command(ctx):
     pages = []
     for i, (cat, cmds) in enumerate(COMMAND_CATEGORIES.items()):
@@ -773,7 +703,6 @@ async def help_command(ctx):
             embed.add_field(name=f".{cmd}", value=desc, inline=False)
         embed.set_footer(text=f"Page {i+1}/{len(COMMAND_CATEGORIES)} | Prefix: .")
         pages.append(embed)
-
     current_page = 0
     message = await ctx.send(embed=pages[current_page])
     await message.add_reaction("⬅️")
@@ -806,6 +735,6 @@ async def help_command(ctx):
             break
 
 
-# Start bot
+# Start Bot
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
