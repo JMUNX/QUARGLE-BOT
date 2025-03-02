@@ -193,8 +193,8 @@ async def freak(ctx):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=4)
-    await asyncio.sleep(5)
+    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await asyncio.sleep(2)
     await bot.close()
 
 
