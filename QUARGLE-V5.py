@@ -69,14 +69,14 @@ executor = ThreadPoolExecutor(max_workers=4)
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name}")
-    channel_id = 656690392049385484
+    channel_id = 1345184113623040051
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
         title="Quargle is online",
-        description="Greetings 😈 Version 69.420.5 is now live",
+        description="Version 69.420.5 is now live",
         color=discord.Color.red(),
     )
-    await channel.send(embed=embed, delete_after=10)
+    await channel.send(embed=embed, delete_after=5)
 
 
 # notes: Sets up the HTTP session and executor when the bot starts, ensuring async resources are ready
@@ -144,7 +144,7 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
-    await ctx.send("finish the job kanye!!!!!!", delete_after=5)
+    await ctx.send("Debug", delete_after=5)
 
 
 @bot.command()
@@ -210,39 +210,48 @@ async def weather(ctx, *, city=""):
         await ctx.send("\n".join(forecast_msg))
 
 
-# notes: Fetches a random meme from a predefined list of Reddit sources, retries up to 3 times if content is invalid
 @bot.command()
 async def meme(ctx):
     await ctx.message.delete(delay=1)
     embed = Embed()
-    max_retries = 3
 
-    for attempt in range(max_retries):
-        meme_url = random.choice(memeSources)
-        try:
-            async with bot.http_session.get(meme_url) as r:
-                if r.status == 404:
-                    logger.warning(f"404 for {meme_url}")
-                    continue
-                res = await r.json()
-            img_num = random.randint(0, min(24, len(res["data"]["children"]) - 1))
-            data = res["data"]["children"][img_num]["data"]
+    async with aiohttp.ClientSession() as session:
+        for meme_url in random.sample(memeSources, len(memeSources)):  # Shuffle sources
+            try:
+                async with session.get(
+                    meme_url, headers={"User-Agent": "meme-bot"}
+                ) as r:
+                    if r.status != 200:
+                        continue  # Skip if Reddit API is down
 
-            if (
-                data["is_video"]
-                or data["domain"] == "Youtube"
-                or not data["is_reddit_media_domain"]
-            ):
-                continue
+                    res = await r.json()
+                    memes = [
+                        post["data"]
+                        for post in res["data"]["children"]
+                        if post["data"].get("url")
+                    ]
+                    memes = [
+                        m
+                        for m in memes
+                        if not m["is_video"]
+                        and m["is_reddit_media_domain"]
+                        and not m["over_18"]
+                    ]
 
-            embed.title = data["title"]
-            embed.set_image(url=data["url"])
-            await ctx.send(embed=embed)
-            return
-        except Exception as e:
-            logger.error(f"Meme fetch error: {e}")
-            if attempt == max_retries - 1:
-                await ctx.send("Failed to fetch meme.", delete_after=1)
+                    if not memes:
+                        continue  # If no valid memes, try next source
+
+                    meme_data = random.choice(memes)
+                    embed.title = meme_data["title"]
+                    embed.set_image(url=meme_data["url"])
+                    await ctx.send(embed=embed)
+                    return
+            except aiohttp.ClientError as e:
+                print(f"HTTP error fetching meme: {e}")
+            except KeyError:
+                print("Unexpected JSON structure.")
+
+    await ctx.send("Failed to fetch meme. Try again later!", delete_after=3)
 
 
 # notes: Replies to a referenced message with a GIF from Tenor based on sanitized message content
