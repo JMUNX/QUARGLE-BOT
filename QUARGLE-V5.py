@@ -354,12 +354,32 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx):
-    if not ctx.message.attachments:
-        await ctx.send("No attachments!", delete_after=4)
+    # Collect attachments from the command message
+    command_attachments = ctx.message.attachments
+
+    # Check if this is a reply and collect attachments from the referenced message
+    ref_attachments = []
+    if ctx.message.reference:
+        try:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            ref_attachments = ref_msg.attachments
+        except Exception as e:
+            logger.error(f"Failed to fetch referenced message: {e}")
+            await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
+
+    # Combine attachments from both sources
+    all_attachments = command_attachments + ref_attachments
+
+    # If no attachments are found in either case, notify and exit
+    if not all_attachments:
+        await ctx.send("No attachments found to upload!", delete_after=4)
         return
+
+    # Process all attachments
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session) for att in ctx.message.attachments]
+        tasks = [save_attachment(att, session) for att in all_attachments]
         await asyncio.gather(*tasks)
+
     await ctx.send(f"All {len(tasks)} file(s) uploaded!", delete_after=10)
 
 
