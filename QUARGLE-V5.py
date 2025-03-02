@@ -20,11 +20,11 @@ import logging
 import time
 from better_profanity import profanity
 
+
 # Configure logging for debugging and performance tracking
 logging.basicConfig(level=logging.DEBUG)  # Changed to DEBUG for more detail
 logger = logging.getLogger(__name__)
 
-# Version 69.420.5
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
@@ -69,13 +69,23 @@ executor = ThreadPoolExecutor(max_workers=4)
 @bot.event
 async def on_ready():
     print(f"Bot is online as {bot.user.name}")
+
+    await bot.wait_until_ready()  # Ensures bot is fully ready before executing
+
     channel_id = 1345184113623040051
     channel = bot.get_channel(channel_id)
+
+    if channel is None:
+        print(f"Error: Could not find channel with ID {channel_id}")
+        return
+
+    version = "69.420.8"  # Ensure version is defined somewhere
     embed = discord.Embed(
         title="Quargle is online",
-        description="Version 69.420.5 is now live",
+        description=f'"{version}" is now live',
         color=discord.Color.red(),
     )
+
     await channel.send(embed=embed, delete_after=5)
 
 
