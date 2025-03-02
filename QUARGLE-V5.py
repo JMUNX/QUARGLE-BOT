@@ -82,7 +82,7 @@ async def on_ready():
     version = "69.420.8"  # Ensure version is defined somewhere
     embed = discord.Embed(
         title="Quargle is online",
-        description=f'"{version}" is now live',
+        description=f"{version} is now live",
         color=discord.Color.red(),
     )
 
