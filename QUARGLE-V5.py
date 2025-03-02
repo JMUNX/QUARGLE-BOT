@@ -23,7 +23,7 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Version 69.420.1
+# Version 69.420.5
 load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
@@ -68,14 +68,14 @@ async def on_ready():
     channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
-        title="Quargle Update Alert",
-        description="Greetings, users! Quargle has been successfully activated. Update #42069 is now live.",
-        color=discord.Color.green(),
+        title="Quargle Alert",
+        description="Greetings niggas 😈 Version 69.420.5 is now live",
+        color=discord.Color.red(),
     )
     embed.set_image(
-        url="https://media1.tenor.com/m/_mX0c3gT8icAAAAd/tweaking-wegeekinghard.gif"
+        url="https://tenor.com/view/sonic-devil-diabolique-evil-gif-9725651736562738158"
     )
-    await channel.send(embed=embed)
+    await channel.send(embed=embed, delete_after=10)
 
 
 # notes: Sets up the HTTP session and executor when the bot starts, ensuring async resources are ready
