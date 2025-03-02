@@ -46,7 +46,7 @@ bot.remove_command("help")  # Remove default help
 # Global resources
 executor = ThreadPoolExecutor(max_workers=4)
 profanity = Profanity()
-BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I am knowledgeable, i keep my responses short, concsise and simple"
+BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
 HISTORY_DIR = "Conversation_History"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)  # Ensure OurMemes folder exists
@@ -75,7 +75,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.10"
+        version = "69.420.12"
         embed = discord.Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -193,8 +193,8 @@ async def freak(ctx):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=1)
-    await asyncio.sleep(2)
+    await ctx.send("Bot is prepping for updates...", delete_after=4)
+    await asyncio.sleep(5)
     await bot.close()
 
 
