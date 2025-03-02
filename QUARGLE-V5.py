@@ -143,6 +143,17 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
+    channel_id = 656690392049385484
+    channel = bot.get_channel(channel_id)
+    embed = discord.Embed(
+        title="Quargle Alert",
+        description="Greetings niggas 😈 Version 69.420.5 is now live",
+        color=discord.Color.red(),
+    )
+    embed.set_image(
+        url="https://tenor.com/view/sonic-devil-diabolique-evil-gif-9725651736562738158"
+    )
+    await channel.send(embed=embed, delete_after=45)
     await ctx.send("Debug", delete_after=5)
 
 
