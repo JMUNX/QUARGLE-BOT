@@ -18,8 +18,7 @@ from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
-from better_profanity import profanity
-
+from better_profanity import Profanity
 
 # Configure logging for debugging and performance tracking
 logging.basicConfig(level=logging.DEBUG)  # Changed to DEBUG for more detail
@@ -392,17 +391,9 @@ async def setcontext(ctx, *, new_context: str):
     await ctx.send(f"Context updated: {new_context}")
 
 
-import os
-import logging
-import asyncio
-import openai
-from discord.ext import commands
-from profanity_filter import ProfanityFilter
-
 # Bot setup
-bot = commands.Bot(command_prefix="!")
 logger = logging.getLogger(__name__)
-profanity = ProfanityFilter()
+profanity = Profanity()  # Instantiate better_profanity's Profanity class
 user_preferences = {}  # Assuming this exists elsewhere
 BOT_IDENTITY = "Your bot's identity string"
 
@@ -423,9 +414,8 @@ def load_conversation_history(user_id):
 
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
-    # Parse lines into message dicts; assume format "role: content\n"
     history = []
-    for line in lines[-10:]:  # Only take last 10 messages
+    for line in lines[-10:]:
         if ": " in line:
             role, content = line.split(": ", 1)
             history.append({"role": role.strip(), "content": content.strip()})
@@ -463,7 +453,7 @@ async def QUARGLE(ctx, *, inputText: str):
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
     )
 
-    # Profanity filter - silently censor
+    # Profanity filter using better_profanity - silently censor
     sanitized_input = (
         profanity.censor(inputText)
         if profanity.contains_profanity(inputText)
@@ -503,9 +493,7 @@ async def QUARGLE(ctx, *, inputText: str):
     conversation_history = load_conversation_history(user_id)
     if not conversation_history or conversation_history[0] != system_msg:
         conversation_history.insert(0, system_msg)
-        with open(
-            get_history_file(user_id), "w", encoding="utf-8"
-        ) as f:  # Rewrite with updated system msg
+        with open(get_history_file(user_id), "w", encoding="utf-8") as f:
             f.write(f"system: {system_msg['content']}\n")
             for msg in conversation_history[1:]:
                 f.write(f"{msg['role']}: {msg['content']}\n")
@@ -527,7 +515,10 @@ async def QUARGLE(ctx, *, inputText: str):
 
     try:
         # Ensure API key
-        openai.api_key = OPENAI_GPT_TOKEN
+        openai.api_key = os.getenv("OPENAI_GPT_TOKEN")
+        if not openai.api_key:
+            raise ValueError("OPENAI_GPT_TOKEN not found in environment variables")
+
         # Call OpenAI API
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
@@ -572,10 +563,6 @@ async def QUARGLE(ctx, *, inputText: str):
             await thinking_message.delete()
         except Exception:
             pass
-
-
-# Run the bot (add your token here)
-# bot.run("YOUR_DISCORD_TOKEN")
 
 
 # notes: Generates an image using DALL-E 3 based on user input and displays it as an embed
