@@ -199,6 +199,57 @@ async def update(ctx):
 
 
 @bot.command()
+@commands.has_permissions(administrator=True)
+async def clearhistory(ctx):
+    """Clears all conversation history files in the Conversation_History directory."""
+    logger.info(
+        f"Clearhistory command invoked by {ctx.author.name} (ID: {ctx.author.id})"
+    )
+    history_dir = HISTORY_DIR  # "Conversation_History"
+
+    if not os.path.exists(history_dir):
+        await ctx.send("No conversation history directory found!", delete_after=5)
+        logger.warning(f"Directory {history_dir} does not exist")
+        return
+
+    files_deleted = 0
+    try:
+        for filename in os.listdir(history_dir):
+            file_path = os.path.join(history_dir, filename)
+            if os.path.isfile(file_path):  # Ensure it's a file, not a subdirectory
+                os.remove(file_path)
+                files_deleted += 1
+                logger.debug(f"Deleted file: {file_path}")
+        if files_deleted > 0:
+            await ctx.send(
+                f"Cleared {files_deleted} conversation history file(s)!", delete_after=5
+            )
+            logger.info(
+                f"Successfully deleted {files_deleted} files from {history_dir}"
+            )
+        else:
+            await ctx.send("No conversation history files to clear!", delete_after=5)
+            logger.info(f"No files found in {history_dir} to delete")
+
+    except Exception as e:
+        logger.error(f"Error clearing history: {e}")
+        await ctx.send(
+            "An error occurred while clearing the conversation history.", delete_after=5
+        )
+
+
+@clearhistory.error
+async def clearhistory_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send(
+            "You need Administrator permissions to use this command!", delete_after=5
+        )
+        logger.warning(
+            f"{ctx.author.name} (ID: {ctx.author.id}) attempted clearhistory without admin perms"
+        )
+
+
+@bot.command()
 async def getpfp(ctx, member: Member = None):
     member = member or ctx.author
     embed = Embed(title=str(member), url=member.display_avatar.url)
@@ -463,27 +514,33 @@ async def imagine(ctx, *, inputText: str):
 # Help menu
 COMMAND_CATEGORIES = {
     "Utilities": {
-        "clear": "Clears messages (manage messages required)",
-        "getpfp": "Shows a user's avatar",
-        "weather": "3-day forecast",
+        "clear": "Clears up to 100 messages (Manage Messages required)",
+        "getpfp": "Shows a user’s avatar (defaults to caller)",
+        "weather": "Shows 3-day forecast for a city",
+        "debug": "Sends a debug message",
     },
-    "Memes": {
-        "freak": "Freaky generator",
-        "meme": "Random Reddit meme",
-        "reaction": "GIF reply",
-        "ourmeme": "Local meme",
-        "upload": "Upload to OurMemes",
+    "Memes & Fun": {
+        "freak": "Sends a freaky message to a channel",
+        "meme": "Posts a random Reddit meme",
+        "reaction": "Replies with a GIF to a referenced message",
+        "ourmeme": "Shares a random local meme (image/video)",
+        "upload": "Uploads attachments to local meme storage",
     },
     "AI Features": {
-        "setcontext": "Sets AI context",
-        "QUARGLE": "AI assistant",
-        "imagine": "DALL-E 3 image",
+        "setcontext": "Sets custom context for AI responses",
+        "QUARGLE": "Chats with QUARGLE AI",
+        "imagine": "Generates an image with DALL-E 3",
+    },
+    "Admin Tools": {
+        "clearhistory": "Clears all conversation history files (Admin required)",
+        "update": "Shuts down bot for updates",
     },
 }
 COLORS = {
     "Utilities": discord.Color.blue(),
-    "Memes": discord.Color.green(),
+    "Memes & Fun": discord.Color.green(),
     "AI Features": discord.Color.purple(),
+    "Admin Tools": discord.Color.red(),
 }
 
 
