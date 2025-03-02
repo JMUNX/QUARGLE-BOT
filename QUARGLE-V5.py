@@ -122,7 +122,7 @@ def load_conversation_history(user_id):
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     history = []
-    for line in lines[-10:]:
+    for line in lines[-10:]:  # Load last 10 lines
         if ": " in line:
             role, content = line.split(": ", 1)
             history.append({"role": role.strip(), "content": content.strip()})
@@ -384,18 +384,21 @@ async def QUARGLE(ctx, *, inputText: str):
             "Conversation history reached limit, generating new history file"
         )
 
-    system_msg = {
-        "role": "system",
-        "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
-    }
+    # Load existing history
     conversation_history = load_conversation_history(user_id)
-    if not conversation_history or conversation_history[0] != system_msg:
-        conversation_history.insert(0, system_msg)
-        with open(get_history_file(user_id), "w", encoding="utf-8") as f:
-            f.write(f"system: {system_msg['content']}\n")
-            for msg in conversation_history[1:]:
-                f.write(f"{msg['role']}: {msg['content']}\n")
+    file_path = get_history_file(user_id)
 
+    # Write system message only if the file is new or empty
+    if not os.path.exists(file_path) or not conversation_history:
+        system_msg = {
+            "role": "system",
+            "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
+        }
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(f"system: {system_msg['content']}\n")
+        conversation_history = [system_msg]  # Reset history with system message
+
+    # Prepare input and append to history
     conversation_input = sanitized_input
     if original_message:
         conversation_input = (
@@ -403,7 +406,13 @@ async def QUARGLE(ctx, *, inputText: str):
         )
     append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
-    conversation_history = conversation_history[-10:]
+
+    # Construct API history: system message + last 9 entries (max 10 total)
+    system_msg = {
+        "role": "system",
+        "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
+    }
+    api_history = [system_msg] + conversation_history[-9:]
 
     thinking_message = await ctx.send("Thinking...")
     try:
@@ -411,7 +420,7 @@ async def QUARGLE(ctx, *, inputText: str):
             None,
             lambda: openai.chat.completions.create(
                 model="gpt-4o",
-                messages=conversation_history,
+                messages=api_history,
             ),
         )
         bot_response = response.choices[0].message.content
