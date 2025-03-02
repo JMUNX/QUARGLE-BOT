@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
+from better_profanity import profanity
+
 
 # Configure logging for debugging and performance tracking
 logging.basicConfig(level=logging.INFO)
@@ -444,6 +446,146 @@ async def imagine(ctx, *, inputText: str):
     logger.info(f"Generated image for '{inputText}': {response.data[0].url}")
 
 
+# real bot
+BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I am friendly, knowledgeable, and always here to help!"
+conversation_history = {}
+user_preferences = {}
+bot = commands.Bot(command_prefix="!")  # Adjust prefix as needed
+
+# Profanity filter setup
+profanity.load_censor_words()
+
+
+# Background task to reply to random messages
+async def random_reply_task():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        for guild in bot.guilds:
+            # Pick a random text channel
+            channels = [
+                ch
+                for ch in guild.text_channels
+                if ch.permissions_for(guild.me).send_messages
+            ]
+            if not channels:
+                continue
+
+            channel = random.choice(channels)
+            # Get recent messages (last 10)
+            messages = [
+                msg async for msg in channel.history(limit=10) if not msg.author.bot
+            ]
+
+            if messages:
+                target_msg = random.choice(messages)
+                # Filter message content
+                filtered_content = profanity.censor(target_msg.content)
+
+                # Skip if message is empty after filtering
+                if not filtered_content.strip() or filtered_content == "****":
+                    continue
+
+                response = await generate_ai_response(
+                    target_msg.author.id, filtered_content
+                )
+                if response:
+                    await target_msg.reply(response)
+
+        # Wait 10 minutes
+        await asyncio.sleep(600)
+
+
+# Generate AI response
+async def generate_ai_response(user_id, input_text):
+    openai.api_key = OPENAI_GPT_TOKEN  # Make sure this is set
+
+    if user_id not in conversation_history:
+        system_msg = {
+            "role": "system",
+            "content": f"{BOT_IDENTITY} Responding casually in a Discord server. {user_preferences.get(user_id, '')}",
+        }
+        conversation_history[user_id] = [system_msg]
+
+    conversation_history[user_id].append({"role": "user", "content": input_text})
+    conversation_history[user_id] = conversation_history[user_id][-10:]
+
+    try:
+        async with bot.executor:
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=conversation_history[user_id],
+                    temperature=0.7,  # Added for more natural responses
+                ),
+            )
+
+        bot_response = response.choices[0].message.content
+        # Filter AI response as well
+        filtered_response = profanity.censor(bot_response)
+
+        if not filtered_response.strip() or filtered_response == "****":
+            return None
+
+        conversation_history[user_id].append(
+            {"role": "assistant", "content": filtered_response}
+        )
+        return filtered_response
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return None
+
+
+# Manual command to trigger random reply
+@bot.command()
+async def randomchat(ctx):
+    channel = ctx.channel
+    messages = [msg async for msg in channel.history(limit=10) if not msg.author.bot]
+
+    if messages:
+        target_msg = random.choice(messages)
+        filtered_content = profanity.censor(target_msg.content)
+
+        if filtered_content.strip() and filtered_content != "****":
+            response = await generate_ai_response(
+                target_msg.author.id, filtered_content
+            )
+            if response:
+                await target_msg.reply(response)
+                await ctx.send("QUARGLE has responded to a random message!")
+            else:
+                await ctx.send("Couldn't generate a suitable response.")
+        else:
+            await ctx.send("No suitable messages found after filtering.")
+    else:
+        await ctx.send("No recent messages to respond to!")
+
+
+# Existing commands
+@bot.command()
+async def setcontext(ctx, *, new_context: str):
+    user_preferences[ctx.author.id] = new_context
+    await ctx.send(f"Context updated: {new_context}")
+
+
+@bot.command()
+async def QUARGLE(ctx, *, inputText: str):
+    filtered_input = profanity.censor(inputText)
+    if not filtered_input.strip() or filtered_input == "****":
+        await ctx.send("Sorry, I can't respond to that message.")
+        return
+
+    response = await generate_ai_response(ctx.author.id, filtered_input)
+    if response:
+        await ctx.send(response)
+    else:
+        await ctx.send("I couldn't generate a response right now.")
+
+
+# Start the background task
+bot.loop.create_task(random_reply_task())
+
+
 # Help Menu Setup
 COMMAND_CATEGORIES = {
     "Utilities": {
@@ -452,6 +594,7 @@ COMMAND_CATEGORIES = {
         "weather": "Shows a 3-day weather forecast for a given city",
     },
     "Memes": {
+        "freak": "freaky generator",
         "meme": "Fetches a random meme from Reddit",
         "reaction": "Replies to a message with a relevant GIF",
         "ourmeme": "Shares a random image or video from the OurMemes folder",
