@@ -49,9 +49,11 @@ executor = ThreadPoolExecutor(max_workers=4)
 profanity = Profanity()
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
 HISTORY_DIR = "Conversation_History"
+SAVED_MESSAGES_DIR = "savedMessages"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)
 os.makedirs("Saves", exist_ok=True)
+os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
 
 
@@ -117,6 +119,10 @@ def get_history_file(user_id):
     return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
 
 
+def get_saved_messages_file(user_id):
+    return os.path.join(SAVED_MESSAGES_DIR, f"user_{user_id}.json")
+
+
 async def load_conversation_history(user_id):
     file_path = get_history_file(user_id)
     if not os.path.exists(file_path):
@@ -124,7 +130,7 @@ async def load_conversation_history(user_id):
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         lines = [line async for line in f]
     history = []
-    for line in lines[-20:]:  # Load last 20 lines for API
+    for line in lines[-20:]:
         if line.strip():
             try:
                 message = json.loads(line)
@@ -474,7 +480,6 @@ async def QUARGLE(ctx, *, inputText: str):
     file_path = get_history_file(user_id)
     conversation_history = await load_conversation_history(user_id)
 
-    # Write system message only if the file is new or empty
     if not os.path.exists(file_path) or not conversation_history:
         system_msg = {
             "role": "system",
@@ -483,7 +488,6 @@ async def QUARGLE(ctx, *, inputText: str):
         await write_system_message(user_id, system_msg["content"])
         conversation_history = [system_msg]
 
-    # Prepare input and append to history
     conversation_input = sanitized_input
     if original_message:
         conversation_input = (
@@ -492,7 +496,6 @@ async def QUARGLE(ctx, *, inputText: str):
     await append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
 
-    # Construct API history: system message + last 20 entries
     system_msg = {
         "role": "system",
         "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
@@ -545,6 +548,110 @@ async def imagine(ctx, *, inputText: str):
         await ctx.send("Failed to generate image.", delete_after=2)
 
 
+@bot.command()
+async def savemessage(ctx):
+    if not ctx.message.reference:
+        await ctx.send("Please reply to a message to save it!", delete_after=5)
+        return
+
+    ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    user_id = ref_msg.author.id
+    username = ref_msg.author.name
+    content = ref_msg.content
+    timestamp = ref_msg.created_at.isoformat()
+
+    file_path = get_saved_messages_file(user_id)
+    messages = []
+
+    # Load existing messages if file exists
+    if os.path.exists(file_path):
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            try:
+                messages = json.loads(await f.read())
+            except json.JSONDecodeError:
+                logger.error(f"Corrupted JSON file for user {user_id}, resetting.")
+                messages = []
+
+    # Append new message
+    messages.append({"content": content, "timestamp": timestamp})
+
+    # Limit to 20 messages, removing oldest if necessary
+    if len(messages) > 20:
+        messages = messages[-20:]
+
+    # Save updated messages
+    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+        await f.write(json.dumps(messages, indent=2))
+
+    await ctx.send(f"Saved message from {username}!", delete_after=5)
+    await ctx.message.delete(delay=1)
+
+
+@bot.command()
+async def mentionmessage(ctx, member: Member, message_number: int = None):
+    user_id = member.id
+    file_path = get_saved_messages_file(user_id)
+
+    if not os.path.exists(file_path):
+        await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
+        return
+
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        try:
+            messages = json.loads(await f.read())
+        except json.JSONDecodeError:
+            logger.error(f"Corrupted JSON file for user {user_id}.")
+            await ctx.send("Error reading saved messages!", delete_after=5)
+            return
+
+    if not messages:
+        await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
+        return
+
+    if message_number is None:
+        # Show preview of all messages
+        embed = Embed(
+            title=f"Saved Messages for {member.name}",
+            color=discord.Color.gold(),
+            description="Select a message by using `.mentionmessage @user <number>`",
+        )
+        for i, msg in enumerate(messages, 1):
+            preview = msg["content"][:50] + ("..." if len(msg["content"]) > 50 else "")
+            embed.add_field(
+                name=f"{i}. {msg['timestamp']}", value=preview, inline=False
+            )
+        preview_msg = await ctx.send(embed=embed)
+
+        # Store the preview message ID for later deletion
+        bot.loop.create_task(cleanup_messages(ctx.message, preview_msg))
+    else:
+        # Retrieve specific message
+        if not 1 <= message_number <= len(messages):
+            await ctx.send(
+                f"Invalid message number! Use 1 to {len(messages)}.", delete_after=5
+            )
+            return
+
+        selected_msg = messages[message_number - 1]
+        embed = Embed(
+            title=f"Message from {member.name}",
+            description=selected_msg["content"],
+            color=discord.Color.gold(),
+        )
+        embed.set_footer(text=f"Saved on: {selected_msg['timestamp']}")
+        await ctx.send(embed=embed)
+        await ctx.message.delete(delay=1)
+
+
+async def cleanup_messages(command_msg, preview_msg):
+    await asyncio.sleep(30)  # Wait 30 seconds for user to select
+    try:
+        await command_msg.delete()
+        await preview_msg.delete()
+    except Exception as e:
+        logger.debug(f"Failed to delete preview messages: {e}")
+
+
 # Help menu
 COMMAND_CATEGORIES = {
     "Utilities": {
@@ -569,12 +676,17 @@ COMMAND_CATEGORIES = {
         "clearhistory": "Clears all conversation history files (Admin required)",
         "update": "Shuts down bot for updates",
     },
+    "Message Management": {
+        "savemessage": "Saves a replied-to message to a JSON file",
+        "mentionmessage": "Lists or retrieves saved messages for a user",
+    },
 }
 COLORS = {
     "Utilities": discord.Color.blue(),
     "Memes & Fun": discord.Color.green(),
     "AI Features": discord.Color.purple(),
     "Admin Tools": discord.Color.red(),
+    "Message Management": discord.Color.orange(),
 }
 
 
