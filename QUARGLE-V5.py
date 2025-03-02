@@ -49,7 +49,8 @@ profanity = Profanity()
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
 HISTORY_DIR = "Conversation_History"
 os.makedirs(HISTORY_DIR, exist_ok=True)
-os.makedirs("OurMemes", exist_ok=True)  # Ensure OurMemes folder exists
+os.makedirs("OurMemes", exist_ok=True)
+os.makedirs("Saves", exist_ok=True)  # Ensure OurMemes folder exists
 user_preferences = {}
 
 
@@ -387,6 +388,46 @@ async def save_attachment(attachment, session):
     async with session.get(attachment.url) as resp:
         if resp.status == 200:
             filename = os.path.join("OurMemes", attachment.filename)
+            async with aiofiles.open(filename, "wb") as f:
+                await f.write(await resp.read())
+
+
+# saves uploaded image or replied to image
+@bot.command()
+async def save(ctx):
+    # Collect attachments from the command message
+    command_attachments = ctx.message.attachments
+
+    # Check if this is a reply and collect attachments from the referenced message
+    ref_attachments = []
+    if ctx.message.reference:
+        try:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            ref_attachments = ref_msg.attachments
+        except Exception as e:
+            logger.error(f"Failed to fetch referenced message: {e}")
+            await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
+
+    # Combine attachments from both sources
+    all_attachments = command_attachments + ref_attachments
+
+    # If no attachments are found in either case, notify and exit
+    if not all_attachments:
+        await ctx.send("No attachments found to upload!", delete_after=4)
+        return
+
+    # Process all attachments
+    async with aiohttp.ClientSession() as session:
+        tasks = [save_attachment(att, session) for att in all_attachments]
+        await asyncio.gather(*tasks)
+
+    await ctx.send(f"All {len(tasks)} file(s) uploaded!", delete_after=10)
+
+
+async def save_attachment(attachment, session):
+    async with session.get(attachment.url) as resp:
+        if resp.status == 200:
+            filename = os.path.join("Saves", attachment.filename)
             async with aiofiles.open(filename, "wb") as f:
                 await f.write(await resp.read())
 
