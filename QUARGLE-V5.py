@@ -454,6 +454,9 @@ async def QUARGLE(ctx, *, inputText: str):
     logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
 
     try:
+        # Ensure API key is set for each request
+        openai.api_key = OPENAI_GPT_TOKEN
+
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
