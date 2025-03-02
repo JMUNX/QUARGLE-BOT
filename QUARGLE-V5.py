@@ -46,7 +46,7 @@ bot.remove_command("help")  # Remove default help
 # Global resources
 executor = ThreadPoolExecutor(max_workers=4)
 profanity = Profanity()
-BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I am friendly, knowledgeable, and always here to help!"
+BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I am friendly, knowledgeable, and always here to help!, i keep my responses short, concsise and simple"
 HISTORY_DIR = "Conversation_History"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)  # Ensure OurMemes folder exists
