@@ -399,22 +399,27 @@ async def save_attachment(item, session, directory):
 @bot.command()
 async def save(ctx):
     command_attachments = ctx.message.attachments
-    ref_attachments = []
-    if ctx.message.reference:
-        try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            ref_attachments = ref_msg.attachments
-        except Exception as e:
-            logger.error(f"Failed to fetch referenced message: {e}")
-            await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
+    ref_urls = []
 
-    all_attachments = command_attachments + ref_attachments
-    if not all_attachments:
-        await ctx.send("No attachments found to upload!", delete_after=4)
+    # Check if this is a reply and extract GIF URLs from the referenced message
+    if ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        ref_urls = [
+            word for word in ref_msg.content.split() if word.lower().endswith(".gif")
+        ]
+
+    # Combine attachments and URLs into a single list for processing
+    all_items = command_attachments + [
+        type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
+        for url in ref_urls
+    ]
+
+    if not all_items:
+        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
 
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session, "Saves") for att in all_attachments]
+        tasks = [save_attachment(item, session, "Saves") for item in all_items]
         await asyncio.gather(*tasks)
 
     num_files = len(tasks)
@@ -424,24 +429,12 @@ async def save(ctx):
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
-async def save_attachment(attachment, session, directory):
-    try:
-        async with session.get(attachment.url) as resp:
-            if resp.status == 200:
-                # Ensure the directory exists
-                os.makedirs(directory, exist_ok=True)
-                filename = os.path.join(directory, attachment.filename)
-                # Write the raw bytes directly to the file
-                async with aiofiles.open(filename, "wb") as f:
-                    content = await resp.read()
-                    await f.write(content)
-                logger.info(f"Saved {filename}")
-            else:
-                logger.error(
-                    f"Failed to download {attachment.filename}: HTTP {resp.status}"
-                )
-    except Exception as e:
-        logger.error(f"Error saving attachment {attachment.filename}: {e}")
+async def save_attachment(item, session, directory):
+    async with session.get(item.url) as resp:
+        if resp.status == 200:
+            filename = os.path.join(directory, item.filename)
+            async with aiofiles.open(filename, "wb") as f:
+                await f.write(await resp.read())
 
 
 @bot.command()
