@@ -29,6 +29,9 @@ load_dotenv("TOKENS.env")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_GPT_TOKEN = os.getenv("OPENAI_GPT_TOKEN")
 
+# Set OpenAI API key globally
+openai.api_key = OPENAI_GPT_TOKEN  # Set the API key at the start
+
 
 # notes: Asynchronously loads text files into lists, used for preloading meme and other sources
 async def load_file(filename):
@@ -399,7 +402,6 @@ async def QUARGLE(ctx, *, inputText: str):
             lambda: openai.chat.completions.create(
                 model="gpt-4o",
                 messages=conversation_history[user_id],
-                api_key=OPENAI_GPT_TOKEN,  # Explicitly pass API key
             ),
         )
         logger.debug(f"OpenAI API response: {response}")
@@ -411,16 +413,16 @@ async def QUARGLE(ctx, *, inputText: str):
         logger.debug(f"Sending response: {bot_response}")
         await ctx.send(bot_response)
 
-    except openai.error.AuthenticationError as e:
+    except openai.AuthenticationError as e:
         logger.error(f"Authentication error with OpenAI: {e}")
         await ctx.send(
             "Error: Invalid API key. Please check your OPENAI_GPT_TOKEN.",
             delete_after=10,
         )
-    except openai.error.RateLimitError as e:
+    except openai.RateLimitError as e:
         logger.error(f"Rate limit error with OpenAI: {e}")
         await ctx.send("Error: Rate limit exceeded. Try again later.", delete_after=10)
-    except openai.error.APIError as e:
+    except openai.APIError as e:
         logger.error(f"API error with OpenAI: {e}")
         await ctx.send(
             "Error: API issue occurred. Please try again later.", delete_after=10
