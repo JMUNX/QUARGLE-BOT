@@ -373,18 +373,17 @@ conversation_history = {}
 user_preferences = {}
 
 
-# notes: Sets a custom context for the AI to tailor its responses for a specific user
+# Command to set context
 @bot.command()
 async def setcontext(ctx, *, new_context: str):
     user_preferences[ctx.author.id] = new_context
     await ctx.send(f"Context updated: {new_context}")
 
 
-# notes: Interactive AI chat using OpenAI's GPT-4o, maintains conversation history per user
+# Command for interactive AI chat using OpenAI's GPT-4o
 @bot.command()
 async def QUARGLE(ctx, *, inputText: str):
     user_id = ctx.author.id
-    openai.api_key = OPENAI_GPT_TOKEN
 
     if user_id not in conversation_history:
         role = next(
@@ -399,13 +398,14 @@ async def QUARGLE(ctx, *, inputText: str):
     conversation_history[user_id].append({"role": "user", "content": inputText})
     conversation_history[user_id] = conversation_history[user_id][-10:]
 
-    async with bot.executor:
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: openai.chat.completions.create(
-                model="gpt-4o", messages=conversation_history[user_id]
-            ),
-        )
+    # Use run_in_executor without async with
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None,
+        lambda: openai.chat.completions.create(
+            model="gpt-4o", messages=conversation_history[user_id]
+        ),
+    )
 
     bot_response = response.choices[0].message.content
     conversation_history[user_id].append({"role": "assistant", "content": bot_response})
