@@ -462,6 +462,58 @@ async def ourmeme(ctx, media_type: str = None):
 
 
 @bot.command()
+async def view(ctx, directory="OurMemes"):
+    # Validate directory
+    valid_dirs = ["Saves", "OurMemes"]
+    if directory not in valid_dirs:
+        await ctx.send(
+            f"Invalid directory! Use one of: {', '.join(valid_dirs)}", delete_after=4
+        )
+        return
+
+    # Get list of image files
+    image_extensions = (".png", ".jpg", ".jpeg", ".gif", ".bmp")
+    files = [f for f in os.listdir(directory) if f.lower().endswith(image_extensions)]
+
+    if not files:
+        await ctx.send(f"No images found in {directory}!", delete_after=4)
+        return
+
+    # Send thumbnails as attachments and create a selection menu
+    message_content = "Select an image to send by replying with its number:\n"
+    attachments = []
+    for i, file in enumerate(files[:10]):  # Limit to 10 files to avoid Discord limits
+        file_path = os.path.join(directory, file)
+        attachments.append(discord.File(file_path, filename=file))
+        message_content += f"{i + 1}. {file}\n"
+
+    preview_msg = await ctx.send(content=message_content, files=attachments)
+
+    # Wait for user response
+    def check(m):
+        return (
+            m.author == ctx.author
+            and m.channel == ctx.channel
+            and m.reference
+            and m.reference.message_id == preview_msg.id
+        )
+
+    try:
+        response = await bot.wait_for("message", timeout=30.0, check=check)
+        choice = int(response.content) - 1
+        if 0 <= choice < len(files[:10]):
+            selected_file = files[choice]
+            file_path = os.path.join(directory, selected_file)
+            await ctx.send(file=discord.File(file_path, filename=selected_file))
+        else:
+            await ctx.send("Invalid selection!", delete_after=4)
+    except asyncio.TimeoutError:
+        await ctx.send("Selection timed out!", delete_after=4)
+    except ValueError:
+        await ctx.send("Please reply with a valid number!", delete_after=4)
+
+
+@bot.command()
 async def setcontext(ctx, *, new_context: str):
     user_id = ctx.author.id
     user_preferences[user_id] = new_context
