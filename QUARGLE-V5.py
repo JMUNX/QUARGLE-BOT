@@ -561,13 +561,13 @@ async def randomchat(ctx):
 
 # Existing commands
 @bot.command()
-async def setcontext(ctx, *, new_context: str):
+async def setreplycontext(ctx, *, new_context: str):
     user_preferences[ctx.author.id] = new_context
     await ctx.send(f"Context updated: {new_context}")
 
 
 @bot.command()
-async def QUARGLE(ctx, *, inputText: str):
+async def QUARGLEREPLY(ctx, *, inputText: str):
     filtered_input = profanity.censor(inputText)
     if not filtered_input.strip() or filtered_input == "****":
         await ctx.send("Sorry, I can't respond to that message.")
