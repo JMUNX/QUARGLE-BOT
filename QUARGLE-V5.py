@@ -72,9 +72,6 @@ async def on_ready():
         description="Greetings niggas 😈 Version 69.420.5 is now live",
         color=discord.Color.red(),
     )
-    embed.set_image(
-        url="https://tenor.com/view/sonic-devil-diabolique-evil-gif-9725651736562738158"
-    )
     await channel.send(embed=embed, delete_after=10)
 
 
@@ -150,11 +147,23 @@ async def debug(ctx):
         description="Greetings niggas 😈 Version 69.420.5 is now live",
         color=discord.Color.red(),
     )
-    embed.set_image(
-        url="https://tenor.com/view/sonic-devil-diabolique-evil-gif-9725651736562738158"
-    )
     await channel.send(embed=embed, delete_after=45)
     await ctx.send("Debug", delete_after=5)
+
+
+@bot.command()
+async def freak(ctx):
+    channel_id = 656690392049385484
+    channel = bot.get_channel(channel_id)
+    embed = discord.Embed(
+        title="😈Quargle freak mode activated😈",
+        description="😈",
+        color=discord.Color.red(),
+    )
+    embed.set_image(
+        url="https://tenor.com/view/freaky-freaky-mode-thug-zesty-licking-gif-17874267150404318497"
+    )
+    await channel.send(embed=embed, delete_after=45)
 
 
 @bot.command()
