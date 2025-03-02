@@ -401,6 +401,16 @@ async def QUARGLE(ctx, *, inputText: str):
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
     )
 
+    # Profanity check on user input
+    if profanity.contains_profanity(inputText):
+        # Optionally, replace the profanity with asterisks or some other symbol
+        sanitized_input = profanity.censor(inputText)
+        await ctx.send(
+            "Your message contained inappropriate language. I've sanitized it for you."
+        )
+    else:
+        sanitized_input = inputText
+
     if ctx.message.reference:
         referenced_message = await ctx.channel.fetch_message(
             ctx.message.reference.message_id
@@ -433,9 +443,9 @@ async def QUARGLE(ctx, *, inputText: str):
         logger.debug(f"Updated system message for user {user_id}: {context}")
 
     # Include reply reference if applicable
-    conversation_input = inputText
+    conversation_input = sanitized_input
     if original_message:
-        conversation_input = f"{inputText}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
+        conversation_input = f"{sanitized_input}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
 
     conversation_history[user_id].append(
         {"role": "user", "content": conversation_input}
