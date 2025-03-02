@@ -153,14 +153,34 @@ async def debug(ctx):
 
 @bot.command()
 async def freak(ctx):
+    # Delete the command message after 1 second
+    await ctx.message.delete(delay=1)
+
+    # Check if the command is a reply to another message
+    if ctx.message.reference and ctx.message.reference.message_id:
+        # Fetch the message that was replied to
+        replied_message = await ctx.channel.fetch_message(
+            ctx.message.reference.message_id
+        )
+        target_user = replied_message.author  # The user who was replied to
+        mention = target_user.mention  # Get their mention string (e.g., <@user_id>)
+    else:
+        # If not a reply, default to no mention or handle differently
+        mention = "nobody in particular"
+
+    # Set the channel to send the embed to
     channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
+
+    # Create the embed
     embed = discord.Embed(
         title="😈freak mode activated😈",
-        description="Im gonna touch you <a:1338355444242055168:>",
+        description=f"Im gonna touch you, {mention}",  # Add the mention to the description
         color=discord.Color.red(),
     )
     embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
+
+    # Send the embed to the specified channel
     await channel.send(embed=embed, delete_after=45)
 
 
