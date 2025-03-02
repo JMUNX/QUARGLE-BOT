@@ -20,9 +20,8 @@ import logging
 import time
 from better_profanity import profanity
 
-
 # Configure logging for debugging and performance tracking
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Changed to DEBUG for more detail
 logger = logging.getLogger(__name__)
 
 # Version 69.420.5
@@ -147,34 +146,27 @@ async def debug(ctx):
 
 @bot.command()
 async def freak(ctx):
-    # Delete the command message after 1 second
     await ctx.message.delete(delay=1)
 
-    # Check if the command is a reply to another message
     if ctx.message.reference and ctx.message.reference.message_id:
-        # Fetch the message that was replied to
         replied_message = await ctx.channel.fetch_message(
             ctx.message.reference.message_id
         )
-        target_user = replied_message.author  # The user who was replied to
-        mention = target_user.mention  # Get their mention string (e.g., <@user_id>)
+        target_user = replied_message.author
+        mention = target_user.mention
     else:
-        # If not a reply, default to no mention or handle differently
         mention = "nobody in particular"
 
-    # Set the channel to send the embed to
     channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
 
-    # Create the embed
     embed = discord.Embed(
         title="😈freak mode activated😈",
-        description=f"Im gonna touch you, {mention}",  # Add the mention to the description
+        description=f"Im gonna touch you, {mention}",
         color=discord.Color.red(),
     )
     embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
 
-    # Send the embed to the specified channel
     await channel.send(embed=embed, delete_after=45)
 
 
@@ -184,7 +176,7 @@ async def update(ctx):
         "Bot is prepping for updates...",
         delete_after=4,
     )
-    await asyncio.sleep(5)  # Ensures the message is deleted before closing
+    await asyncio.sleep(5)
     await bot.close()
 
 
@@ -263,11 +255,9 @@ async def reaction(ctx):
         username = referenced_message.author.name
         embed = discord.Embed(title="", description="")
 
-        # Define word lists in-code
         disallowed_words = {"cunt", "nazi", "retard"}
         replacements = {"cunt": "jerk", "nazi": "creep", "retard": "goof"}
 
-        # Replace disallowed words
         words = original_message.split()
         sanitized_message = []
         for word in words:
@@ -284,7 +274,6 @@ async def reaction(ctx):
                 sanitized_message.append(word)
         sanitized_message = " ".join(sanitized_message)
 
-        # Scrape Tenor search page
         search_term = urllib.parse.quote(sanitized_message)
         tenor_url = f"https://tenor.com/search/{search_term}-gifs"
 
@@ -306,7 +295,6 @@ async def reaction(ctx):
         embed.title = f"{username}: {original_message}"
         embed.set_image(url=gif_url)
 
-        # Replying to the referenced message
         await referenced_message.reply(embed=embed)
         return
     else:
@@ -384,6 +372,9 @@ async def setcontext(ctx, *, new_context: str):
 @bot.command()
 async def QUARGLE(ctx, *, inputText: str):
     user_id = ctx.author.id
+    logger.debug(
+        f"Processing QUARGLE command for user {user_id} with input: {inputText}"
+    )
 
     if user_id not in conversation_history:
         role = next(
@@ -394,22 +385,51 @@ async def QUARGLE(ctx, *, inputText: str):
             "content": f"{BOT_IDENTITY} Assisting a {role}. {user_preferences.get(user_id, '')}",
         }
         conversation_history[user_id] = [system_msg]
+        logger.debug(f"Initialized conversation history for user {user_id}")
 
     conversation_history[user_id].append({"role": "user", "content": inputText})
     conversation_history[user_id] = conversation_history[user_id][-10:]
+    logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
 
-    # Use run_in_executor without async with
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(
-        None,
-        lambda: openai.chat.completions.create(
-            model="gpt-4o", messages=conversation_history[user_id]
-        ),
-    )
+    try:
+        # Use run_in_executor without async with
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: openai.chat.completions.create(
+                model="gpt-4o",
+                messages=conversation_history[user_id],
+                api_key=OPENAI_GPT_TOKEN,  # Explicitly pass API key
+            ),
+        )
+        logger.debug(f"OpenAI API response: {response}")
 
-    bot_response = response.choices[0].message.content
-    conversation_history[user_id].append({"role": "assistant", "content": bot_response})
-    await ctx.send(bot_response)
+        bot_response = response.choices[0].message.content
+        conversation_history[user_id].append(
+            {"role": "assistant", "content": bot_response}
+        )
+        logger.debug(f"Sending response: {bot_response}")
+        await ctx.send(bot_response)
+
+    except openai.error.AuthenticationError as e:
+        logger.error(f"Authentication error with OpenAI: {e}")
+        await ctx.send(
+            "Error: Invalid API key. Please check your OPENAI_GPT_TOKEN.",
+            delete_after=10,
+        )
+    except openai.error.RateLimitError as e:
+        logger.error(f"Rate limit error with OpenAI: {e}")
+        await ctx.send("Error: Rate limit exceeded. Try again later.", delete_after=10)
+    except openai.error.APIError as e:
+        logger.error(f"API error with OpenAI: {e}")
+        await ctx.send(
+            "Error: API issue occurred. Please try again later.", delete_after=10
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in QUARGLE command: {e}")
+        await ctx.send(
+            "An unexpected error occurred. Check logs for details.", delete_after=10
+        )
 
 
 # notes: Generates an image using DALL-E 3 based on user input and displays it as an embed
@@ -420,17 +440,18 @@ async def imagine(ctx, *, inputText: str):
         "Processing <a:4704loadingicon:1246520222844977252>", delete_after=1
     )
 
-    async with bot.executor:
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: openai.images.generate(
-                model="dall-e-3",
-                prompt=inputText,
-                size="512x512",
-                n=1,
-                response_format="url",
-            ),
-        )
+    # Use run_in_executor without async with
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None,
+        lambda: openai.images.generate(
+            model="dall-e-3",
+            prompt=inputText,
+            size="512x512",
+            n=1,
+            response_format="url",
+        ),
+    )
 
     embed = Embed(title=inputText, url=response.data[0].url)
     embed.set_image(url=response.data[0].url)
