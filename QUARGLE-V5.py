@@ -76,7 +76,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.15"
+        version = "69.420.20"
         embed = discord.Embed(
             title="Quargle is online",
             description=f"{version} is now live",
