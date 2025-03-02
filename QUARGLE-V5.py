@@ -450,8 +450,6 @@ async def imagine(ctx, *, inputText: str):
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I am friendly, knowledgeable, and always here to help!"
 conversation_history = {}
 user_preferences = {}
-bot = commands.Bot(command_prefix="!")  # Adjust prefix as needed
-
 # Profanity filter setup
 profanity.load_censor_words()
 
