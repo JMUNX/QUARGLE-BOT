@@ -122,7 +122,7 @@ def load_conversation_history(user_id):
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     history = []
-    for line in lines[-10:]:  # Load last 10 lines
+    for line in lines[-20:]:  # Load last 10 lines
         if ": " in line:
             role, content = line.split(": ", 1)
             history.append({"role": role.strip(), "content": content.strip()})
@@ -140,7 +140,7 @@ def check_history_limit(user_id):
     if not os.path.exists(file_path):
         return False
     with open(file_path, "r", encoding="utf-8") as f:
-        return len(f.readlines()) >= 10
+        return len(f.readlines()) >= 20
 
 
 def reset_conversation_history(user_id):
