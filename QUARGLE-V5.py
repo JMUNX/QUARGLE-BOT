@@ -373,7 +373,7 @@ async def upload(ctx):
         return
 
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session, "ourMemes") for att in all_attachments]
+        tasks = [save_attachment(att, session, "OurMemes") for att in all_attachments]
         await asyncio.gather(*tasks)
 
     num_files = len(tasks)
