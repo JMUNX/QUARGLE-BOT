@@ -68,8 +68,8 @@ async def on_ready():
     channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
-        title="Quargle Alert",
-        description="Greetings niggas 😈 Version 69.420.5 is now live",
+        title="Quargle is online",
+        description="Greetings 😈 Version 69.420.5 is now live",
         color=discord.Color.red(),
     )
     await channel.send(embed=embed, delete_after=10)
@@ -156,13 +156,11 @@ async def freak(ctx):
     channel_id = 656690392049385484
     channel = bot.get_channel(channel_id)
     embed = discord.Embed(
-        title="😈Quargle freak mode activated😈",
-        description="😈",
+        title="😈freak mode activated😈",
+        description="Im gonna touch you <a:1338355444242055168:>",
         color=discord.Color.red(),
     )
-    embed.set_image(
-        url="https://tenor.com/view/freaky-freaky-mode-thug-zesty-licking-gif-17874267150404318497"
-    )
+    embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
     await channel.send(embed=embed, delete_after=45)
 
 
