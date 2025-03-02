@@ -373,13 +373,22 @@ async def setcontext(ctx, *, new_context: str):
     await ctx.send(f"Context updated: {new_context}")
 
 
-# Command for interactive AI chat using OpenAI's GPT-4o
 @bot.command()
 async def QUARGLE(ctx, *, inputText: str):
     user_id = ctx.author.id
     logger.debug(
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
     )
+
+    if ctx.message.reference:
+        referenced_message = await ctx.channel.fetch_message(
+            ctx.message.reference.message_id
+        )
+        original_message = referenced_message.content
+        original_author = referenced_message.author.name
+    else:
+        original_message = ""
+        original_author = ""
 
     if user_id not in conversation_history:
         role = next(
@@ -395,12 +404,17 @@ async def QUARGLE(ctx, *, inputText: str):
             f"Initialized conversation history for user {user_id} with context: {context}"
         )
 
-    conversation_history[user_id].append({"role": "user", "content": inputText})
+    conversation_input = inputText
+    if original_message:
+        conversation_input = f"{inputText}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
+
+    conversation_history[user_id].append(
+        {"role": "user", "content": conversation_input}
+    )
     conversation_history[user_id] = conversation_history[user_id][-10:]
     logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
 
     try:
-        # Use run_in_executor without async with
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
