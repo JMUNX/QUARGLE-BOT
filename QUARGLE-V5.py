@@ -354,6 +354,7 @@ async def setcontext(ctx, *, new_context: str):
 
 @bot.command()
 async def QUARGLE(ctx, *, inputText: str):
+    openai.api_key = OPENAI_GPT_TOKEN
     user_id = ctx.author.id
     logger.debug(
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
