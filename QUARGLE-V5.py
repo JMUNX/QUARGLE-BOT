@@ -384,11 +384,23 @@ async def upload(ctx):
 
 
 async def save_attachment(attachment, session, directory):
-    async with session.get(attachment.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join(directory, attachment.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
+    try:
+        async with session.get(attachment.url) as resp:
+            if resp.status == 200:
+                # Ensure the directory exists
+                os.makedirs(directory, exist_ok=True)
+                filename = os.path.join(directory, attachment.filename)
+                # Write the raw bytes directly to the file
+                async with aiofiles.open(filename, "wb") as f:
+                    content = await resp.read()
+                    await f.write(content)
+                logger.info(f"Saved {filename}")
+            else:
+                logger.error(
+                    f"Failed to download {attachment.filename}: HTTP {resp.status}"
+                )
+    except Exception as e:
+        logger.error(f"Error saving attachment {attachment.filename}: {e}")
 
 
 @bot.command()
@@ -420,11 +432,23 @@ async def save(ctx):
 
 
 async def save_attachment(attachment, session, directory):
-    async with session.get(attachment.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join(directory, attachment.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
+    try:
+        async with session.get(attachment.url) as resp:
+            if resp.status == 200:
+                # Ensure the directory exists
+                os.makedirs(directory, exist_ok=True)
+                filename = os.path.join(directory, attachment.filename)
+                # Write the raw bytes directly to the file
+                async with aiofiles.open(filename, "wb") as f:
+                    content = await resp.read()
+                    await f.write(content)
+                logger.info(f"Saved {filename}")
+            else:
+                logger.error(
+                    f"Failed to download {attachment.filename}: HTTP {resp.status}"
+                )
+    except Exception as e:
+        logger.error(f"Error saving attachment {attachment.filename}: {e}")
 
 
 @bot.command()
