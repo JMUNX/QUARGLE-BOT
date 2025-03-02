@@ -153,8 +153,8 @@ def reset_conversation_history(user_id):
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-    if amount > 100:
-        await ctx.send("I WON'T DELETE MORE THAN 100 MESSAGES!!!!", delete_after=2)
+    if amount > 200:
+        await ctx.send("I WON'T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
         return
     await ctx.send(f"Deleting {amount} messages...", delete_after=2)
     deleted = await ctx.channel.purge(limit=amount, bulk=True)
@@ -193,8 +193,8 @@ async def freak(ctx):
 
 @bot.command()
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=4)
-    await asyncio.sleep(5)
+    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await asyncio.sleep(2)
     await bot.close()
 
 
