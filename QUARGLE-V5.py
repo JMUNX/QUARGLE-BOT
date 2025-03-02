@@ -12,6 +12,7 @@ import python_weather
 from datetime import datetime
 from bs4 import BeautifulSoup
 import aiofiles
+import json
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
@@ -116,38 +117,35 @@ def get_history_file(user_id):
     return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
 
 
-def load_conversation_history(user_id):
+async def load_conversation_history(user_id):
     file_path = get_history_file(user_id)
     if not os.path.exists(file_path):
         return []
-    with open(file_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        lines = [line async for line in f]
     history = []
-    for line in lines[-20:]:  # Load last 20 lines
-        if ": " in line:
-            role, content = line.split(": ", 1)
-            history.append({"role": role.strip(), "content": content.strip()})
+    for line in lines[-20:]:  # Load last 20 lines for API
+        if line.strip():
+            try:
+                message = json.loads(line)
+                history.append(message)
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON in history file: {line}")
     return history
 
 
-def append_to_conversation_history(user_id, role, content):
+async def append_to_conversation_history(user_id, role, content):
     file_path = get_history_file(user_id)
-    with open(file_path, "a", encoding="utf-8") as f:
-        f.write(f"{role}: {content}\n")
+    message = {"role": role, "content": content}
+    async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
+        await f.write(f"{json.dumps(message)}\n")
 
 
-def check_history_limit(user_id):
+async def write_system_message(user_id, content):
     file_path = get_history_file(user_id)
-    if not os.path.exists(file_path):
-        return False
-    with open(file_path, "r", encoding="utf-8") as f:
-        return len(f.readlines()) >= 20
-
-
-def reset_conversation_history(user_id):
-    file_path = get_history_file(user_id)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write("")
+    system_msg = {"role": "system", "content": content}
+    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+        await f.write(f"{json.dumps(system_msg)}\n")
 
 
 # Commands
@@ -202,11 +200,10 @@ async def update(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def clearhistory(ctx):
-    """Clears all conversation history files in the Conversation_History directory."""
     logger.info(
         f"Clearhistory command invoked by {ctx.author.name} (ID: {ctx.author.id})"
     )
-    history_dir = HISTORY_DIR  # "Conversation_History"
+    history_dir = HISTORY_DIR
 
     if not os.path.exists(history_dir):
         await ctx.send("No conversation history directory found!", delete_after=5)
@@ -217,7 +214,7 @@ async def clearhistory(ctx):
     try:
         for filename in os.listdir(history_dir):
             file_path = os.path.join(history_dir, filename)
-            if os.path.isfile(file_path):  # Ensure it's a file, not a subdirectory
+            if os.path.isfile(file_path):
                 os.remove(file_path)
                 files_deleted += 1
                 logger.debug(f"Deleted file: {file_path}")
@@ -231,7 +228,6 @@ async def clearhistory(ctx):
         else:
             await ctx.send("No conversation history files to clear!", delete_after=5)
             logger.info(f"No files found in {history_dir} to delete")
-
     except Exception as e:
         logger.error(f"Error clearing history: {e}")
         await ctx.send(
@@ -271,7 +267,7 @@ async def weather(ctx, *, city=""):
             forecast_msg.extend(
                 f"{daily.date.strftime('%m/%d')}: High: {daily.highest_temperature}°F, "
                 f"Low: {daily.lowest_temperature}°F, Sunset: {daily.sunset.strftime('%I:%M %p')}"
-                for daily in weather.daily_forecasts[:3]  # Limit to 3 days
+                for daily in weather.daily_forecasts[:3]
             )
             await ctx.send("\n".join(forecast_msg))
         except Exception as e:
@@ -303,7 +299,7 @@ async def meme(ctx):
                     if not memes:
                         continue
                     meme_data = random.choice(memes)
-                    embed.title = meme_data["title"][:256]  # Discord embed title limit
+                    embed.title = meme_data["title"][:256]
                     embed.set_image(url=meme_data["url"])
                     await ctx.send(embed=embed)
                     return
@@ -355,10 +351,7 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx):
-    # Collect attachments from the command message
     command_attachments = ctx.message.attachments
-
-    # Check if this is a reply and collect attachments from the referenced message
     ref_attachments = []
     if ctx.message.reference:
         try:
@@ -368,41 +361,25 @@ async def upload(ctx):
             logger.error(f"Failed to fetch referenced message: {e}")
             await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
 
-    # Combine attachments from both sources
     all_attachments = command_attachments + ref_attachments
-
-    # If no attachments are found in either case, notify and exit
     if not all_attachments:
         await ctx.send("No attachments found to upload!", delete_after=4)
         return
 
-    # Process all attachments
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session) for att in all_attachments]
+        tasks = [save_attachment(att, session, "OurMemes") for att in all_attachments]
         await asyncio.gather(*tasks)
 
-    # Customize response based on number of files uploaded
     num_files = len(tasks)
     if num_files == 1:
         await ctx.send("1 file uploaded", delete_after=10)
     else:
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
-
-
-async def save_attachment(attachment, session):
-    async with session.get(attachment.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join("OurMemes", attachment.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
 
 
 @bot.command()
 async def save(ctx):
-    # Collect attachments from the command message
     command_attachments = ctx.message.attachments
-
-    # Check if this is a reply and collect attachments from the referenced message
     ref_attachments = []
     if ctx.message.reference:
         try:
@@ -412,20 +389,15 @@ async def save(ctx):
             logger.error(f"Failed to fetch referenced message: {e}")
             await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
 
-    # Combine attachments from both sources
     all_attachments = command_attachments + ref_attachments
-
-    # If no attachments are found in either case, notify and exit
     if not all_attachments:
         await ctx.send("No attachments found to upload!", delete_after=4)
         return
 
-    # Process all attachments
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(att, session) for att in all_attachments]
+        tasks = [save_attachment(att, session, "Saves") for att in all_attachments]
         await asyncio.gather(*tasks)
 
-    # Customize response based on number of files uploaded
     num_files = len(tasks)
     if num_files == 1:
         await ctx.send("1 file uploaded", delete_after=10)
@@ -433,10 +405,10 @@ async def save(ctx):
         await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
-async def save_attachment(attachment, session):
+async def save_attachment(attachment, session, directory):
     async with session.get(attachment.url) as resp:
         if resp.status == 200:
-            filename = os.path.join("Saves", attachment.filename)
+            filename = os.path.join(directory, attachment.filename)
             async with aiofiles.open(filename, "wb") as f:
                 await f.write(await resp.read())
 
@@ -496,18 +468,11 @@ async def QUARGLE(ctx, *, inputText: str):
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
 
-    username = ctx.author.name  # Use username instead of role
+    username = ctx.author.name
     context = user_preferences.get(user_id, "")
 
-    if check_history_limit(user_id):
-        reset_conversation_history(user_id)
-        await ctx.send(
-            "Conversation history reached limit, generating new history file"
-        )
-
-    # Load existing history
-    conversation_history = load_conversation_history(user_id)
     file_path = get_history_file(user_id)
+    conversation_history = await load_conversation_history(user_id)
 
     # Write system message only if the file is new or empty
     if not os.path.exists(file_path) or not conversation_history:
@@ -515,9 +480,8 @@ async def QUARGLE(ctx, *, inputText: str):
             "role": "system",
             "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
         }
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(f"system: {system_msg['content']}\n")
-        conversation_history = [system_msg]  # Reset history with system message
+        await write_system_message(user_id, system_msg["content"])
+        conversation_history = [system_msg]
 
     # Prepare input and append to history
     conversation_input = sanitized_input
@@ -525,10 +489,10 @@ async def QUARGLE(ctx, *, inputText: str):
         conversation_input = (
             f"{sanitized_input}\n\nReplying to {original_author}: '{original_message}'"
         )
-    append_to_conversation_history(user_id, "user", conversation_input)
+    await append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
 
-    # Construct API history: system message + last 20 entries (max 20 total)
+    # Construct API history: system message + last 20 entries
     system_msg = {
         "role": "system",
         "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
@@ -545,7 +509,7 @@ async def QUARGLE(ctx, *, inputText: str):
             ),
         )
         bot_response = response.choices[0].message.content
-        append_to_conversation_history(user_id, "assistant", bot_response)
+        await append_to_conversation_history(user_id, "assistant", bot_response)
         await thinking_message.delete()
         await ctx.send(bot_response)
     except Exception as e:
@@ -564,9 +528,9 @@ async def imagine(ctx, *, inputText: str):
     try:
         response = await bot.loop.run_in_executor(
             None,
-            lambda: openai.images.generate(
-                model="dall-e-3",
+            lambda: openai.Image.create(
                 prompt=inputText,
+                model="dall-e-3",
                 size="512x512",
                 n=1,
                 response_format="url",
