@@ -50,7 +50,7 @@ BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this 
 HISTORY_DIR = "Conversation_History"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)
-os.makedirs("Saves", exist_ok=True)  # Ensure OurMemes folder exists
+os.makedirs("Saves", exist_ok=True)
 user_preferences = {}
 
 
@@ -381,7 +381,12 @@ async def upload(ctx):
         tasks = [save_attachment(att, session) for att in all_attachments]
         await asyncio.gather(*tasks)
 
-    await ctx.send(f"All {len(tasks)} file(s) uploaded!", delete_after=10)
+    # Customize response based on number of files uploaded
+    num_files = len(tasks)
+    if num_files == 1:
+        await ctx.send("1 file uploaded", delete_after=10)
+    else:
+        await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
 async def save_attachment(attachment, session):
@@ -392,7 +397,6 @@ async def save_attachment(attachment, session):
                 await f.write(await resp.read())
 
 
-# saves uploaded image or replied to image
 @bot.command()
 async def save(ctx):
     # Collect attachments from the command message
@@ -421,7 +425,12 @@ async def save(ctx):
         tasks = [save_attachment(att, session) for att in all_attachments]
         await asyncio.gather(*tasks)
 
-    await ctx.send(f"All {len(tasks)} file(s) uploaded!", delete_after=10)
+    # Customize response based on number of files uploaded
+    num_files = len(tasks)
+    if num_files == 1:
+        await ctx.send("1 file uploaded", delete_after=10)
+    else:
+        await ctx.send(f"{num_files} files uploaded", delete_after=10)
 
 
 async def save_attachment(attachment, session):
