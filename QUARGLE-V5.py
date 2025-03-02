@@ -370,7 +370,7 @@ async def upload(ctx):
         try:
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             logger.info(
-                f"Referenced message content: {ref_msg.content}, Attachments: {len(ref_msg.attachments)}"
+                f"Referenced message fetched - ID: {ref_msg.id}, Content: {ref_msg.content}, Attachments: {len(ref_msg.attachments)}"
             )
             ref_attachments = ref_msg.attachments
 
@@ -383,7 +383,6 @@ async def upload(ctx):
                 ]
                 if urls:
                     logger.info(f"Found GIF URLs in referenced message: {urls}")
-                    # Treat each URL as a pseudo-attachment
                     ref_attachments = [
                         discord.Attachment(
                             data={"url": url, "filename": url.split("/")[-1]},
@@ -391,8 +390,25 @@ async def upload(ctx):
                         )
                         for url in urls
                     ]
+        except discord.NotFound:
+            logger.error(
+                f"Referenced message not found: {ctx.message.reference.message_id}"
+            )
+            await ctx.send(
+                "The referenced message was deleted or not found.", delete_after=4
+            )
+        except discord.Forbidden:
+            logger.error(
+                f"Missing permissions to fetch message: {ctx.message.reference.message_id}"
+            )
+            await ctx.send(
+                "I don’t have permission to view the referenced message.",
+                delete_after=4,
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch referenced message: {e}")
+            logger.error(
+                f"Unexpected error fetching referenced message {ctx.message.reference.message_id}: {e}"
+            )
             await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
 
     all_attachments = command_attachments + ref_attachments
