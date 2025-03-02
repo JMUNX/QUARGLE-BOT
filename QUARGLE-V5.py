@@ -140,7 +140,7 @@ def check_history_limit(user_id):
     if not os.path.exists(file_path):
         return False
     with open(file_path, "r", encoding="utf-8") as f:
-        return len(f.readlines()) >= 50
+        return len(f.readlines()) >= 10
 
 
 def reset_conversation_history(user_id):
