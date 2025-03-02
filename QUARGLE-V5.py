@@ -357,17 +357,27 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx):
+    # Log the raw message content and attachment count for debugging
+    logger.info(
+        f"Message content: {ctx.message.content}, Attachments: {len(ctx.message.attachments)}"
+    )
+
     command_attachments = ctx.message.attachments
     ref_attachments = []
+
+    # Check if this is a reply and fetch referenced message attachments
     if ctx.message.reference:
         try:
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             ref_attachments = ref_msg.attachments
+            logger.info(f"Referenced message attachments: {len(ref_attachments)}")
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
             await ctx.send("Couldn’t fetch the referenced message.", delete_after=4)
 
     all_attachments = command_attachments + ref_attachments
+    logger.info(f"Total attachments found: {len(all_attachments)}")
+
     if not all_attachments:
         await ctx.send("No attachments found to upload!", delete_after=4)
         return
@@ -385,12 +395,13 @@ async def upload(ctx):
 
 async def save_attachment(attachment, session, directory):
     try:
+        logger.info(
+            f"Processing attachment: {attachment.filename}, URL: {attachment.url}"
+        )
         async with session.get(attachment.url) as resp:
             if resp.status == 200:
-                # Ensure the directory exists
                 os.makedirs(directory, exist_ok=True)
                 filename = os.path.join(directory, attachment.filename)
-                # Write the raw bytes directly to the file
                 async with aiofiles.open(filename, "wb") as f:
                     content = await resp.read()
                     await f.write(content)
