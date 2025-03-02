@@ -375,7 +375,7 @@ async def QUARGLE(ctx, *, inputText: str):
         except Exception as e:
             logger.error(f"Failed to fetch referenced message: {e}")
 
-    role = next((r.name for r in ctx.author.roles if r.name != "@everyone"), "Member")
+    username = ctx.author.name  # Use username instead of role
     context = user_preferences.get(user_id, "")
 
     if check_history_limit(user_id):
@@ -392,7 +392,7 @@ async def QUARGLE(ctx, *, inputText: str):
     if not os.path.exists(file_path) or not conversation_history:
         system_msg = {
             "role": "system",
-            "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
+            "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
         }
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(f"system: {system_msg['content']}\n")
@@ -410,7 +410,7 @@ async def QUARGLE(ctx, *, inputText: str):
     # Construct API history: system message + last 9 entries (max 10 total)
     system_msg = {
         "role": "system",
-        "content": f"{BOT_IDENTITY} Assisting a {role}. {context}",
+        "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
     }
     api_history = [system_msg] + conversation_history[-9:]
 
