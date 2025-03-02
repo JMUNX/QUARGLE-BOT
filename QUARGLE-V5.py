@@ -399,31 +399,30 @@ async def QUARGLE(ctx, *, inputText: str):
         f"Processing QUARGLE command for user {user_id} with input: {inputText}"
     )
 
-    # Profanity filter check
-    if profanity.contains_profanity(inputText):
-        logger.debug(f"Profanity detected in input: {inputText}")
-        sanitized_input = profanity.censor(inputText)
-        await ctx.send(
-            "Your message contained inappropriate language. I've sanitized it for you."
-        )
-    else:
-        logger.debug(f"No profanity detected in input: {inputText}")
-        sanitized_input = inputText
+    # Profanity filter check - silently censor if needed
+    sanitized_input = (
+        profanity.censor(inputText)
+        if profanity.contains_profanity(inputText)
+        else inputText
+    )
+    logger.debug(f"Processed input: {sanitized_input}")
 
+    # Fetch referenced message if it exists
+    original_message = ""
+    original_author = ""
     if ctx.message.reference:
-        referenced_message = await ctx.channel.fetch_message(
-            ctx.message.reference.message_id
-        )
-        original_message = referenced_message.content
-        original_author = referenced_message.author.name
-    else:
-        original_message = ""
-        original_author = ""
+        try:
+            referenced_message = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+            original_message = referenced_message.content
+            original_author = referenced_message.author.name
+        except Exception as e:
+            logger.error(f"Failed to fetch referenced message: {e}")
 
+    # Get user role (excluding @everyone)
     role = next((r.name for r in ctx.author.roles if r.name != "@everyone"), "Member")
-    context = user_preferences.get(
-        user_id, ""
-    )  # Always get latest user-defined context
+    context = user_preferences.get(user_id, "")  # Latest user-defined context
 
     system_msg = {
         "role": "system",
@@ -440,7 +439,7 @@ async def QUARGLE(ctx, *, inputText: str):
         conversation_history[user_id][0] = system_msg
         logger.debug(f"Updated system message for user {user_id}: {context}")
 
-    # Include reply reference if applicable
+    # Build conversation input with reply context if applicable
     conversation_input = sanitized_input
     if original_message:
         conversation_input = f"{sanitized_input}\n\nThe user is replying to a message from {original_author}: '{original_message}'"
@@ -450,13 +449,16 @@ async def QUARGLE(ctx, *, inputText: str):
     )
     conversation_history[user_id] = conversation_history[user_id][
         -10:
-    ]  # Keep last 10 messages for memory efficiency
+    ]  # Limit to last 10 messages
     logger.debug(f"Updated conversation history: {conversation_history[user_id]}")
 
-    try:
-        # Ensure API key is set for each request
-        openai.api_key = OPENAI_GPT_TOKEN
+    # Send "thinking..." message
+    thinking_message = await ctx.send("Thinking...")
 
+    try:
+        # Ensure API key is set
+        openai.api_key = OPENAI_GPT_TOKEN
+        # Call OpenAI API
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
@@ -472,27 +474,36 @@ async def QUARGLE(ctx, *, inputText: str):
             {"role": "assistant", "content": bot_response}
         )
         logger.debug(f"Sending response: {bot_response}")
+
+        # Delete "thinking..." and send response
+        await thinking_message.delete()
         await ctx.send(bot_response)
 
     except openai.AuthenticationError as e:
         logger.error(f"Authentication error with OpenAI: {e}")
         await ctx.send(
-            "Error: Invalid API key. Please check your OPENAI_GPT_TOKEN.",
-            delete_after=10,
+            "Error: Invalid API key. Contact the bot admin.", delete_after=10
         )
     except openai.RateLimitError as e:
         logger.error(f"Rate limit error with OpenAI: {e}")
         await ctx.send("Error: Rate limit exceeded. Try again later.", delete_after=10)
     except openai.APIError as e:
         logger.error(f"API error with OpenAI: {e}")
-        await ctx.send(
-            "Error: API issue occurred. Please try again later.", delete_after=10
-        )
+        await ctx.send("Error: API issue occurred. Try again later.", delete_after=10)
+    except ValueError as e:
+        logger.error(f"Configuration error: {e}")
+        await ctx.send("Error: Bot misconfigured. Contact the admin.", delete_after=10)
     except Exception as e:
         logger.error(f"Unexpected error in QUARGLE command: {e}")
         await ctx.send(
             "An unexpected error occurred. Check logs for details.", delete_after=10
         )
+    finally:
+        # Ensure "thinking..." is cleaned up even on error
+        try:
+            await thinking_message.delete()
+        except Exception:
+            pass  # Ignore if already deleted
 
 
 # notes: Generates an image using DALL-E 3 based on user input and displays it as an embed
