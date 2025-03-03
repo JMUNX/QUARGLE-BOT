@@ -431,6 +431,7 @@ def image_to_ascii(image, width=50, dense=True):
     return ascii_str
 
 
+@bot.command()
 async def ascii(ctx):
     image = None
     if ctx.message.attachments:
@@ -451,6 +452,7 @@ async def ascii(ctx):
     await ctx.send("Here is your detailed ASCII art:", file=file)
 
 
+@bot.command()
 async def ascii_simple(ctx):
     image = None
     if ctx.message.attachments:
