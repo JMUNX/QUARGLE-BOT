@@ -314,19 +314,16 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
 
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        # Only grab attachments from bot messages
         if ref_msg.author == bot.user and ref_msg.attachments:
             ref_attachments = ref_msg.attachments
-            logger.debug(f"Bot message referenced, attachments: {len(ref_attachments)}")
             await ctx.send(
                 f"Bot message referenced with {len(ref_attachments)} attachment(s)"
             )
 
-    # Combine the attachments from the command and the referenced message
     all_attachments = command_attachments + ref_attachments
     if all_attachments:
         for attachment in all_attachments:
-            # Now simply download the file
+            # Try to download the file
             await save_attachment(attachment, bot.http_session, directory)
             await ctx.send(f"Downloaded: {attachment.filename}", delete_after=5)
     else:
