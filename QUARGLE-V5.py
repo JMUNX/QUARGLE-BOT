@@ -62,17 +62,11 @@ user_preferences = {}
 @bot.event
 # Handles bot startup and announcement
 async def on_ready():
-    # Enhanced Opus loading with common paths and dynamic search
+    # Define Opus paths with project-specific and common system locations
     opus_paths = [
-        "libopus.so",  # Default Linux
-        "/usr/lib/libopus.so",  # Common Linux path
-        "/usr/local/lib/libopus.so",  # Another Linux path
-        "/usr/lib/x86_64-linux-gnu/libopus.so",  # Ubuntu/Debian
-        "/lib/x86_64-linux-gnu/libopus.so",  # Alternative Ubuntu path
-        "libopus.dylib",  # macOS
-        "/usr/local/lib/libopus.dylib",  # macOS Homebrew
-        "libopus-0.dll",  # Windows
-        "C:/Program Files/Opus/libopus-0.dll",  # Windows custom install
+        "/home/linux/Desktop/AutoUpdateBot/libopus.so",  # Custom project directory
+        "/usr/lib/x86_64-linux-gnu/libopus.so",  # Common Ubuntu/Debian path
+        "/usr/lib/libopus.so",  # Generic Linux path
     ]
     opus_loaded = False
     for path in opus_paths:
@@ -85,26 +79,9 @@ async def on_ready():
         except Exception as e:
             logger.debug(f"Failed to load Opus from {path}: {e}")
 
-    # Try to find Opus dynamically if predefined paths fail
-    if not opus_loaded and os.name != "nt":  # Skip dynamic search on Windows
-        try:
-            import glob
-
-            opus_files = glob.glob("/usr/**/libopus.so", recursive=True)
-            for opus_file in opus_files:
-                try:
-                    discord.opus.load_opus(opus_file)
-                    opus_loaded = True
-                    logger.info(f"Opus loaded dynamically from {opus_file}")
-                    break
-                except Exception as e:
-                    logger.debug(f"Dynamic load failed from {opus_file}: {e}")
-        except Exception as e:
-            logger.debug(f"Dynamic Opus search failed: {e}")
-
     if not opus_loaded:
         logger.warning(
-            "Opus not loaded! Voice features (.play) will be disabled. Ensure libopus is installed and accessible."
+            "Opus not loaded! Voice features (.play) will be disabled. Place libopus.so in /home/linux/Desktop/AutoUpdateBot/ or ensure it’s installed system-wide."
         )
     else:
         logger.info("Voice features enabled with Opus.")
@@ -112,7 +89,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.23"
+        version = "69.420.25"
         embed = discord.Embed(
             title="Quargle is online",
             description=f"{version} is now live",
