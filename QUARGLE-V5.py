@@ -40,7 +40,7 @@ if not BOT_TOKEN or not OPENAI_GPT_TOKEN:
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
-intents.voice_states = True  # Added for voice channel support
+intents.voice_states = True
 bot = commands.Bot(
     command_prefix=".", intents=intents, case_insensitive=True, max_messages=1000
 )
@@ -62,9 +62,26 @@ user_preferences = {}
 @bot.event
 # Handles bot startup and announcement
 async def on_ready():
-    # Ensure Opus is loaded for voice features
-    if not discord.opus.is_loaded():
-        discord.opus.load_opus("libopus.so")  # Adjust path based on your system
+    # Load Opus dynamically with error handling
+    opus_paths = [
+        "libopus.so",  # Linux default
+        "/usr/lib/libopus.so",  # Common Linux path
+        "/usr/local/lib/libopus.so",  # Another Linux path
+        "libopus.dylib",  # macOS
+        "libopus-0.dll",  # Windows
+    ]
+    opus_loaded = False
+    for path in opus_paths:
+        try:
+            if not discord.opus.is_loaded():
+                discord.opus.load_opus(path)
+            opus_loaded = True
+            logger.info(f"Opus loaded successfully from {path}")
+            break
+        except Exception as e:
+            logger.debug(f"Failed to load Opus from {path}: {e}")
+    if not opus_loaded:
+        logger.warning("Opus not loaded! Voice features (.play) will be disabled.")
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
@@ -199,7 +216,7 @@ async def caption_image(image_url, top_text, bottom_text):
     image = Image.open(io.BytesIO(image_data)).convert("RGBA")
     draw = ImageDraw.Draw(image)
     try:
-        font = ImageFont.truetype("arial.ttf", 40)  # Ensure arial.ttf is available
+        font = ImageFont.truetype("arial.ttf", 40)
     except:
         font = ImageFont.load_default()
     width, height = image.size
@@ -473,7 +490,7 @@ async def caption(ctx, top_text: str, bottom_text: str):
 # Plays a sound effect in the user’s voice channel
 async def play(ctx, sound: str):
     sound_files = {
-        "laugh": "laugh.mp3",  # Add your sound files to a "sounds" directory
+        "laugh": "laugh.mp3",
         "clap": "clap.mp3",
     }
     if sound not in sound_files:
@@ -483,6 +500,12 @@ async def play(ctx, sound: str):
         return
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("You need to be in a voice channel!", delete_after=4)
+        return
+    if not discord.opus.is_loaded():
+        await ctx.send(
+            "Voice support is not available due to missing Opus library!",
+            delete_after=4,
+        )
         return
     voice_channel = ctx.author.voice.channel
     vc = await voice_channel.connect()
@@ -673,7 +696,7 @@ async def clearhistory(ctx):
     except Exception as e:
         logger.error(f"Error clearing history: {e}")
         await ctx.send(
-            "An error occurred while clearing the conversation history.", delete_after=5
+            "An error occurred while cleaning the conversation history.", delete_after=5
         )
 
 
@@ -727,9 +750,7 @@ class MessageSelect(ui.Select):
             SelectOption(
                 label=f"Message {i+1}", value=str(i), description=msg["content"][:50]
             )
-            for i, msg in enumerate(
-                messages[:25]
-            )  # Limit to 25 due to Discord constraints
+            for i, msg in enumerate(messages[:25])
         ]
         super().__init__(placeholder="Select a message...", options=options)
 
@@ -794,7 +815,7 @@ async def mentionmessage(ctx, member: Member, page: int = 1):
     view = MessageView(ctx, messages, member)
     preview_msg = await ctx.send(embed=embed, view=view)
     await view.wait()
-    await preview_msg.edit(view=None)  # Remove select menu after interaction
+    await preview_msg.edit(view=None)
 
 
 # Help Menu
@@ -882,7 +903,7 @@ async def help_command(ctx):
     view = HelpView(ctx)
     msg = await ctx.send(embed=embed, view=view)
     await view.wait()
-    await msg.edit(view=None)  # Remove select menu after timeout/interaction
+    await msg.edit(view=None)
 
 
 # Start Bot
