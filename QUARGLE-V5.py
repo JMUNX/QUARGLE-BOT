@@ -750,7 +750,6 @@ async def QUARGLE(ctx, *, inputText: str):
 
 @bot.command()
 async def imagine(ctx, *, inputText: str):
-    await ctx.message.delete(delay=2)
     openai.api_key = OPENAI_GPT_TOKEN  # Ensure this is set globally or here
     processing_msg = await ctx.send("Processing...", delete_after=1)
 
@@ -761,13 +760,13 @@ async def imagine(ctx, *, inputText: str):
             lambda: openai.images.generate(
                 prompt=inputText,
                 model="dall-e-3",
-                size="512x512",
+                size="1024x1024",  # Updated to a supported size for DALL-E 3
                 n=1,
                 response_format="url",
             ),
         )
 
-        # Extract the URL from the response (new SDK returns a list of Image objects)
+        # Extract the URL from the response
         image_url = response.data[0].url
         embed = Embed(title=inputText, url=image_url)
         embed.set_image(url=image_url)
@@ -779,6 +778,9 @@ async def imagine(ctx, *, inputText: str):
     except openai.RateLimitError as e:
         logger.error(f"Rate limit error in imagine: {e}")
         await ctx.send("Rate limit exceeded. Try again later.", delete_after=5)
+    except openai.APIError as e:
+        logger.error(f"API error in imagine: {e}")
+        await ctx.send(f"API error: {str(e)}", delete_after=5)
     except Exception as e:
         logger.error(f"Imagine error: {e}")
         await ctx.send("Failed to generate image.", delete_after=2)
