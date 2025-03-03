@@ -465,6 +465,38 @@ async def ascii_simple(ctx):
 
 
 @bot.command()
+async def pixelate(ctx):
+    image = None
+    if ctx.message.attachments:
+        image_bytes = await ctx.message.attachments[0].read()
+        image = Image.open(io.BytesIO(image_bytes))
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            image_bytes = await ref_msg.attachments[0].read()
+            image = Image.open(io.BytesIO(image_bytes))
+
+    if image is None:
+        await ctx.send("Please upload or reply to an image.")
+        return
+
+    pixel_size = 10  # Size of pixel blocks
+    image = image.resize(
+        (image.width // pixel_size, image.height // pixel_size), Image.NEAREST
+    )
+    image = image.resize(
+        (image.width * pixel_size, image.height * pixel_size), Image.NEAREST
+    )
+
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+
+    file = discord.File(img_bytes, filename="pixelated.png")
+    await ctx.send("Here is your pixelated image:", file=file)
+
+
+@bot.command()
 # Adds captions to an image from a referenced message or attachment
 async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     image_url = None
