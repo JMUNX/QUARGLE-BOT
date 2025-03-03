@@ -539,8 +539,8 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             "Comic Sans font file not found! Using default font.", delete_after=4
         )
         font_path = None
-    base_font_size = width // 20
-    padding = 40
+    base_font_size = width // 15
+    padding = 30
 
     def wrap_text(text, font, max_width):
         """Wrap text into lines."""
@@ -576,7 +576,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         )
         total_height = len(lines) * (line_height + 5)
         while total_height > max_height and font_size > 10:
-            font_size -= 3
+            font_size -= 2
             font = (
                 ImageFont.truetype(font_path, font_size)
                 if font_path
