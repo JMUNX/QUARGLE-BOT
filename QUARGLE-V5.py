@@ -540,10 +540,10 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         )
         font_path = None
     base_font_size = width // 10
-    padding = 20  # Padding for top and bottom
+    padding = 20
 
     def wrap_text(text, font, max_width):
-        """Wrap text into lines, scaling single words if too wide."""
+        """Wrap text into lines."""
         words = text.split()
         lines = []
         current_line = []
@@ -555,23 +555,28 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             else:
                 if current_line:
                     lines.append(" ".join(current_line))
-                # Handle single words that exceed width
-                if (
-                    draw.textbbox((0, 0), word, font=font)[2]
-                    - draw.textbbox((0, 0), word, font=font)[0]
-                    > max_width
-                ):
-                    lines.append(word)  # Rely on font scaling
-                else:
-                    current_line = [word]
+                lines.append(word)  # Single words go on their own line
+                current_line = []
         if current_line:
             lines.append(" ".join(current_line))
         return lines
 
     def fit_text(text, max_width, max_height, base_size):
-        """Fit text within width and height, consistent scaling for single/multi-word."""
+        """Fit text within height constraint."""
         font_size = base_size
-        while font_size > 10:
+        font = (
+            ImageFont.truetype(font_path, font_size)
+            if font_path
+            else ImageFont.load_default(size=font_size)
+        )
+        lines = wrap_text(text, font, max_width)
+        line_height = (
+            draw.textbbox((0, 0), lines[0] if lines else "A", font=font)[3]
+            - draw.textbbox((0, 0), lines[0] if lines else "A", font=font)[1]
+        )
+        total_height = len(lines) * (line_height + 5)
+        while total_height > max_height and font_size > 10:
+            font_size -= 2
             font = (
                 ImageFont.truetype(font_path, font_size)
                 if font_path
@@ -583,80 +588,47 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 - draw.textbbox((0, 0), lines[0] if lines else "A", font=font)[1]
             )
             total_height = len(lines) * (line_height + 5)
-            max_line_width = (
-                max(
-                    draw.textbbox((0, 0), line, font=font)[2]
-                    - draw.textbbox((0, 0), line, font=font)[0]
-                    for line in lines
-                )
-                if lines
-                else 0
-            )
-            if max_line_width <= max_width and total_height <= max_height:
-                return font, lines, line_height
-            font_size -= 2
-        # Fallback to smallest size
-        font = (
-            ImageFont.truetype(font_path, 10)
-            if font_path
-            else ImageFont.load_default(size=10)
-        )
-        lines = wrap_text(text, font, max_width)
-        line_height = (
-            draw.textbbox((0, 0), lines[0] if lines else "A", font=font)[3]
-            - draw.textbbox((0, 0), lines[0] if lines else "A", font=font)[1]
-        )
-        total_height = len(lines) * (line_height + 5)
-        if total_height > max_height:
-            allowed_lines = max_height // (line_height + 5)
-            lines = lines[:allowed_lines]
         return font, lines, line_height
 
-    # Define regions, wrapping to full width
     region_height = height // 3 - padding
 
     if top_text:
         top_text = top_text.upper()
         font, top_lines, line_height = fit_text(
             top_text, width, region_height, base_font_size
-        )  # Full width
-        total_height = len(top_lines) * (line_height + 5)
+        )
         y_offset = padding
         for line in top_lines:
             bbox = draw.textbbox((0, 0), line, font=font)
             x = (width - (bbox[2] - bbox[0])) // 2
-            if y_offset + line_height <= height // 3:
-                draw.text(
-                    (x, y_offset),
-                    line,
-                    font=font,
-                    fill="white",
-                    stroke_width=2,
-                    stroke_fill="black",
-                )
+            draw.text(
+                (x, y_offset),
+                line,
+                font=font,
+                fill="white",
+                stroke_width=2,
+                stroke_fill="black",
+            )
             y_offset += line_height + 5
 
     if bottom_text:
         bottom_text = bottom_text.upper()
         font, bottom_lines, line_height = fit_text(
             bottom_text, width, region_height, base_font_size
-        )  # Full width
+        )
         total_height = len(bottom_lines) * (line_height + 5)
         y_offset = height - total_height - padding
         for line in bottom_lines:
             bbox = draw.textbbox((0, 0), line, font=font)
             x = (width - (bbox[2] - bbox[0])) // 2
-            if y_offset + line_height <= height - padding:
-                draw.text(
-                    (x, y_offset),
-                    line,
-                    font=font,
-                    fill="white",
-                    stroke_width=2,
-                    stroke_fill="black",
-                )
-            else:
-                break  # Prevent clipping
+            draw.text(
+                (x, y_offset),
+                line,
+                font=font,
+                fill="white",
+                stroke_width=2,
+                stroke_fill="black",
+            )
             y_offset += line_height + 5
 
     if not top_text and not bottom_text:
