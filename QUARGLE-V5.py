@@ -750,12 +750,15 @@ async def QUARGLE(ctx, *, inputText: str):
 
 @bot.command()
 async def imagine(ctx, *, inputText: str):
-    openai.api_key = OPENAI_GPT_TOKEN
-    await ctx.send("Processing...", delete_after=1)
+    await ctx.message.delete(delay=2)
+    openai.api_key = OPENAI_GPT_TOKEN  # Ensure this is set globally or here
+    processing_msg = await ctx.send("Processing...", delete_after=1)
+
     try:
+        # Run the image generation in an executor to avoid blocking
         response = await bot.loop.run_in_executor(
             None,
-            lambda: openai.Image.create(
+            lambda: openai.images.generate(
                 prompt=inputText,
                 model="dall-e-3",
                 size="512x512",
@@ -763,9 +766,19 @@ async def imagine(ctx, *, inputText: str):
                 response_format="url",
             ),
         )
-        embed = Embed(title=inputText, url=response.data[0].url)
-        embed.set_image(url=response.data[0].url)
+
+        # Extract the URL from the response (new SDK returns a list of Image objects)
+        image_url = response.data[0].url
+        embed = Embed(title=inputText, url=image_url)
+        embed.set_image(url=image_url)
         await ctx.send(embed=embed)
+
+    except openai.AuthenticationError as e:
+        logger.error(f"Authentication error in imagine: {e}")
+        await ctx.send("Authentication failed. Check your API key.", delete_after=5)
+    except openai.RateLimitError as e:
+        logger.error(f"Rate limit error in imagine: {e}")
+        await ctx.send("Rate limit exceeded. Try again later.", delete_after=5)
     except Exception as e:
         logger.error(f"Imagine error: {e}")
         await ctx.send("Failed to generate image.", delete_after=2)
