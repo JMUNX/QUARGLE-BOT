@@ -23,6 +23,7 @@ import cv2
 import numpy as np
 from typing import Optional, Dict
 import nacl
+from discord import FFmpegPCMAudio, PCMVolumeTransformer
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -660,6 +661,10 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     await ctx.send(file=File(buffer, "captioned.png"))
 
 
+FFMPEG_PATH = "/home/linux/Desktop/AutoUpdateBot/bin/ffmpeg"
+FFMPEG_PATH = "/usr/bin/ffmpeg"
+
+
 @bot.command()
 async def play(ctx, sound: str = None, volume: int = 50):
     await ctx.message.delete(delay=2)
@@ -740,14 +745,16 @@ async def play(ctx, sound: str = None, volume: int = 50):
         return
 
     try:
-        # Specify FFmpeg path if in project directory (adjust as needed)
-        ffmpeg_path = os.path.join(
-            os.getcwd(), "bin/ffmpeg"
-        )  # Example: 'bin/ffmpeg' or 'bin/ffmpeg.exe'
-        if not os.path.exists(ffmpeg_path):
-            ffmpeg_path = "ffmpeg"  # Default to system PATH if local copy isn’t found
+        if not os.path.exists(FFMPEG_PATH):
+            await ctx.send(
+                f"FFmpeg not found at {FFMPEG_PATH}! Install or adjust path.",
+                delete_after=4,
+            )
+            logger.error(f"FFmpeg not found at {FFMPEG_PATH}")
+            await vc.disconnect()
+            return
 
-        audio_source = FFmpegPCMAudio(sound_path, executable=ffmpeg_path)
+        audio_source = FFmpegPCMAudio(sound_path, executable=FFMPEG_PATH)
         volume_adjusted = PCMVolumeTransformer(audio_source, volume=volume / 100.0)
         logger.info(f"Playing {sound} at {volume}% volume")
         vc.play(volume_adjusted)
@@ -756,8 +763,10 @@ async def play(ctx, sound: str = None, volume: int = 50):
             await asyncio.sleep(1)
         logger.info(f"Finished playing {sound}")
     except FileNotFoundError:
-        await ctx.send("FFmpeg not found! Check installation or PATH.", delete_after=4)
-        logger.error(f"FFmpeg not found at {ffmpeg_path}")
+        await ctx.send(
+            f"FFmpeg not found at {FFMPEG_PATH}! Install it correctly.", delete_after=4
+        )
+        logger.error(f"FFmpeg not found at {FFMPEG_PATH}")
     except Exception as e:
         await ctx.send("Failed to play sound!", delete_after=4)
         logger.error(f"Error playing {sound_path}: {type(e).__name__} - {str(e)}")
