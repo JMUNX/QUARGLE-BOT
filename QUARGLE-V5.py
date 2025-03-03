@@ -410,7 +410,6 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
-# ASCII characters from most dense to least dense
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 ASCII_CHARS_SIMPLE = "@%#*+=-:. "
 
@@ -419,7 +418,6 @@ def image_to_ascii(image, width=50, dense=True):
     aspect_ratio = image.height / image.width
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
-
     ascii_chars = ASCII_CHARS_DENSE if dense else ASCII_CHARS_SIMPLE
     ascii_str = "".join(
         ascii_chars[pixel // (256 // len(ascii_chars))] for pixel in image.getdata()
@@ -427,11 +425,9 @@ def image_to_ascii(image, width=50, dense=True):
     ascii_str = "\n".join(
         ascii_str[i : i + width] for i in range(0, len(ascii_str), width)
     )
-
     return ascii_str
 
 
-@bot.command()
 async def ascii(ctx):
     image = None
     if ctx.message.attachments:
@@ -442,17 +438,14 @@ async def ascii(ctx):
         if ref_msg.attachments:
             image_bytes = await ref_msg.attachments[0].read()
             image = Image.open(io.BytesIO(image_bytes))
-
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
     ascii_art = image_to_ascii(image, width=100, dense=True)
     file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
     await ctx.send("Here is your detailed ASCII art:", file=file)
 
 
-@bot.command()
 async def ascii_simple(ctx):
     image = None
     if ctx.message.attachments:
@@ -463,11 +456,9 @@ async def ascii_simple(ctx):
         if ref_msg.attachments:
             image_bytes = await ref_msg.attachments[0].read()
             image = Image.open(io.BytesIO(image_bytes))
-
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
     ascii_art = image_to_ascii(image, width=50, dense=False)
     file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_simple.txt")
     await ctx.send("Here is your simplified ASCII art:", file=file)
