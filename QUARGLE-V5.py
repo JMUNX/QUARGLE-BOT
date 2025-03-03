@@ -478,6 +478,18 @@ def deepfry_image(image: Image, intensity: int) -> Image:
 async def on_message(message):
     global last_bot_image
 
+    # Only track messages from the bot (to store its images)
+    if message.author == bot.user and message.attachments:
+        # Save the last image sent by the bot
+        last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_message(message):
+    global last_bot_image
+
     # If the bot sends an image, store it for future deepfrying
     if message.author == bot.user and message.attachments:
         last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
