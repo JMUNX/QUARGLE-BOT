@@ -277,7 +277,7 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx, directory="OurMemes"):
-    valid_dirs = ["OurMemes", "Saves"]
+    valid_dirs = ["OurMemes", "Saves", "Emojis"]
     if directory not in valid_dirs:
         await ctx.send(
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
