@@ -62,26 +62,16 @@ user_preferences = {}
 @bot.event
 # Handles bot startup and announcement
 async def on_ready():
-    # Define Opus paths with project-specific and common system locations
-    opus_paths = [
-        "/home/linux/Desktop/AutoUpdateBot/libopus.so",  # Custom project directory
-        "/usr/lib/x86_64-linux-gnu/libopus.so",  # Common Ubuntu/Debian path
-        "/usr/lib/libopus.so",  # Generic Linux path
-    ]
-    opus_loaded = False
-    for path in opus_paths:
-        try:
-            if not discord.opus.is_loaded():
-                discord.opus.load_opus(path)
-            opus_loaded = True
-            logger.info(f"Opus loaded successfully from {path}")
-            break
-        except Exception as e:
-            logger.debug(f"Failed to load Opus from {path}: {e}")
-
-    if not opus_loaded:
+    # Load Opus from known working path
+    opus_path = "/usr/lib/x86_64-linux-gnu/libopus.so"
+    try:
+        if not discord.opus.is_loaded():
+            discord.opus.load_opus(opus_path)
+        logger.info(f"Opus loaded successfully from {opus_path}")
+    except Exception as e:
+        logger.error(f"Failed to load Opus from {opus_path}: {e}")
         logger.warning(
-            "Opus not loaded! Voice features (.play) will be disabled. Place libopus.so in /home/linux/Desktop/AutoUpdateBot/ or ensure it’s installed system-wide."
+            "Voice features (.play) will be disabled due to Opus loading failure."
         )
     else:
         logger.info("Voice features enabled with Opus.")
@@ -89,7 +79,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.25"
+        version = "69.420.23"
         embed = discord.Embed(
             title="Quargle is online",
             description=f"{version} is now live",
