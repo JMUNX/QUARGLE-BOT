@@ -465,7 +465,9 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         bottom_text = bottom_text.upper()
         bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
         bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
-        bottom_y = height - (bottom_bbox[3] - bottom_bbox[1]) - 10
+        bottom_y = (
+            height - (bottom_bbox[3] - bottom_bbox[1]) - 20
+        )  # Added 10px buffer (total 20px from edge)
         draw.text(
             (bottom_x, bottom_y),
             bottom_text,
