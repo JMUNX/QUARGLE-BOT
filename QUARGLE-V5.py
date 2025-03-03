@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import io
 import cv2
 import numpy as np
+from typing import Optional
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -81,7 +82,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.36"
+        version = "69.420.40"
         embed = Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -195,6 +196,18 @@ async def get_image_from_context(ctx):
     return None
 
 
+async def get_bot_image_as_file(
+    last_image: Optional[Image.Image], filename: str = "bot_image.png"
+) -> Optional[File]:
+    """Convert stored bot image to a Discord File object."""
+    if last_image is None:
+        return None
+    img_bytes = io.BytesIO()
+    last_image.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return File(img_bytes, filename=filename)
+
+
 # Utility Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -304,35 +317,35 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
         )
         return
+
+    # Collect attachments from the command message
     command_attachments = ctx.message.attachments
     ref_urls = []
     ref_attachments = []
+    bot_image_file = None
+
+    # Handle referenced message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         ref_urls = [
-            word for word in ref_msg.content.split() if word.lower().endswith(".gif")
+            word
+            for word in ref_msg.content.split()
+            if word.lower().endswith((".gif", ".png", ".jpg", ".jpeg"))
         ]
         ref_attachments = ref_msg.attachments if ref_msg.author != bot.user else []
+
+        # If the referenced message is from the bot and has an attachment
         if (
             ref_msg.author == bot.user
+            and ref_msg.attachments
             and "last_bot_image" in globals()
             and last_bot_image
         ):
-            img_bytes = io.BytesIO()
-            last_bot_image.save(img_bytes, format="PNG")
-            img_bytes.seek(0)
-            ref_attachments.append(
-                type(
-                    "obj",
-                    (),
-                    {
-                        "url": ref_msg.attachments[0].url,
-                        "filename": "bot_image.png",
-                        "read": lambda: img_bytes.getvalue(),
-                    },
-                )()
+            bot_image_file = await get_bot_image_as_file(
+                last_bot_image, ref_msg.attachments[0].filename
             )
 
+    # Combine all items to upload
     all_items = (
         command_attachments
         + ref_attachments
@@ -341,13 +354,49 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             for url in ref_urls
         ]
     )
+
+    # Add bot image if available
+    if bot_image_file:
+        # Temporarily save bot image to disk to use with save_attachment
+        temp_path = os.path.join(directory, bot_image_file.filename)
+        with open(temp_path, "wb") as f:
+            f.write(bot_image_file.fp.read())
+        all_items.append(
+            type(
+                "obj",
+                (),
+                {"url": f"file://{temp_path}", "filename": bot_image_file.filename},
+            )()
+        )
+
     if not all_items:
-        await ctx.send("No attachments or GIF links found!", delete_after=4)
+        await ctx.send("No attachments or valid links found!", delete_after=4)
         return
+
+    # Upload all items
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, directory) for item in all_items]
         await asyncio.gather(*tasks)
+
+    # Clean up temporary bot image file if it was created
+    if bot_image_file and os.path.exists(temp_path):
+        os.remove(temp_path)
+
     await ctx.send(f"{len(tasks)} file(s) uploaded to {directory}", delete_after=10)
+
+
+# Replace the existing on_message event handler
+@bot.event
+async def on_message(message):
+    global last_bot_image
+    if message.author == bot.user and message.attachments:
+        try:
+            last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+            logger.debug(f"Stored bot image: {message.attachments[0].filename}")
+        except Exception as e:
+            logger.error(f"Failed to store bot image: {e}")
+            last_bot_image = None
+    await bot.process_commands(message)
 
 
 @bot.command()
