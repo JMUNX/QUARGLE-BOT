@@ -455,10 +455,8 @@ def deepfry_image(image: Image, intensity: int) -> Image:
             g = min(255, max(0, g + random.randint(-intensity, intensity)))
             b = min(255, max(0, b + random.randint(-intensity, intensity)))
             pixels[i, j] = (r, g, b)
-
     # Apply a subtle blur to make the effect even more chaotic
     image = image.filter(ImageFilter.GaussianBlur(radius=intensity / 3))
-
     return image
 
 
