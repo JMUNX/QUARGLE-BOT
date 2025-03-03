@@ -410,18 +410,22 @@ async def pixelate(ctx, intensity: int = 5):
 
 @bot.command()
 async def deepfry(ctx, intensity: int = 5):
+    # Check if the intensity is within a valid range
     if intensity < 1 or intensity > 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
 
     image = None
+    # Check if the message has an attachment
     if ctx.message.attachments:
         image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
+    # If it's a reply to another message with an image attachment
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
             image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
 
+    # If no image was found, notify the user
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
@@ -455,8 +459,10 @@ def deepfry_image(image: Image, intensity: int) -> Image:
             g = min(255, max(0, g + random.randint(-intensity, intensity)))
             b = min(255, max(0, b + random.randint(-intensity, intensity)))
             pixels[i, j] = (r, g, b)
+
     # Apply a subtle blur to make the effect even more chaotic
     image = image.filter(ImageFilter.GaussianBlur(radius=intensity / 3))
+
     return image
 
 
