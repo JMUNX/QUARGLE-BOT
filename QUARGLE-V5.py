@@ -410,6 +410,7 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
+# ASCII characters from most dense to least dense
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 ASCII_CHARS_SIMPLE = "@%#*+=-:. "
 
@@ -418,16 +419,19 @@ def image_to_ascii(image, width=50, dense=True):
     aspect_ratio = image.height / image.width
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
+
     ascii_chars = ASCII_CHARS_DENSE if dense else ASCII_CHARS_SIMPLE
     ascii_str = "".join(
-        ascii_chars[pixel // (256 // len(ascii_chars))] for pixel in image.getdata()
+        ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in image.getdata()
     )
     ascii_str = "\n".join(
         ascii_str[i : i + width] for i in range(0, len(ascii_str), width)
     )
+
     return ascii_str
 
 
+@bot.command()
 async def ascii(ctx):
     image = None
     if ctx.message.attachments:
@@ -438,14 +442,17 @@ async def ascii(ctx):
         if ref_msg.attachments:
             image_bytes = await ref_msg.attachments[0].read()
             image = Image.open(io.BytesIO(image_bytes))
+
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
+
     ascii_art = image_to_ascii(image, width=100, dense=True)
     file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
     await ctx.send("Here is your detailed ASCII art:", file=file)
 
 
+@bot.command()
 async def ascii_simple(ctx):
     image = None
     if ctx.message.attachments:
@@ -456,16 +463,22 @@ async def ascii_simple(ctx):
         if ref_msg.attachments:
             image_bytes = await ref_msg.attachments[0].read()
             image = Image.open(io.BytesIO(image_bytes))
+
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
+
     ascii_art = image_to_ascii(image, width=50, dense=False)
     file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_simple.txt")
     await ctx.send("Here is your simplified ASCII art:", file=file)
 
 
 @bot.command()
-async def pixelate(ctx):
+async def pixelate(ctx, intensity: int = 5):
+    if intensity < 1 or intensity > 10:
+        await ctx.send("Please choose an intensity between 1 and 10.")
+        return
+
     image = None
     if ctx.message.attachments:
         image_bytes = await ctx.message.attachments[0].read()
@@ -480,7 +493,9 @@ async def pixelate(ctx):
         await ctx.send("Please upload or reply to an image.")
         return
 
-    pixel_size = 10  # Size of pixel blocks
+    pixel_size = (
+        intensity * 5
+    )  # Adjust pixelation level based on intensity (range 5 to 50)
     image = image.resize(
         (image.width // pixel_size, image.height // pixel_size), Image.NEAREST
     )
@@ -493,7 +508,7 @@ async def pixelate(ctx):
     img_bytes.seek(0)
 
     file = discord.File(img_bytes, filename="pixelated.png")
-    await ctx.send("Here is your pixelated image:", file=file)
+    await ctx.send(f"Here is your pixelated image (Intensity {intensity}):", file=file)
 
 
 @bot.command()
