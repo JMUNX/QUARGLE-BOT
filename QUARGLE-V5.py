@@ -415,13 +415,16 @@ async def deepfry(ctx, intensity: int = 5):
         return
 
     image = None
+    # Check if the message has an attachment
     if ctx.message.attachments:
         image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
+    # If it's a reply to another message with an image attachment
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
             image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
 
+    # If no image was found, notify the user
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
