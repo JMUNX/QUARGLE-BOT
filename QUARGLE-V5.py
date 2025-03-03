@@ -426,10 +426,10 @@ async def emojify(ctx, emoji_name: str = None):
 
         # Map emoji names to Unicode placeholders (customize as needed)
         emoji_previews = {
-            "freak": ":freak:",
-            "death": ":death",
-            "creep": ":creep:",
-            "chad": ":chad:",
+            "freak": "<:freak:1345942275175219221>",
+            "death": "<:death:1345942262860873740>",
+            "creep": "<:creep:1345942246851215410>",
+            "chad": "<:chad:1345942227800817755>",
             # Add more mappings or use a default emoji for unmapped names
         }
         default_preview = "🙂"  # Fallback for unmapped emojis
