@@ -200,6 +200,7 @@ async def save_image_data(image: Image.Image, directory: str, filename: str) -> 
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
+    await ctx.message.delete(delay=2)
     if amount > 200:
         await ctx.send("I WON’T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
         return
@@ -216,11 +217,13 @@ async def clear_error(ctx, error):
 
 @bot.command()
 async def debug(ctx):
+    await ctx.message.delete(delay=2)
     await ctx.send("Debug", delete_after=5)
 
 
 @bot.command()
 async def getpfp(ctx, member: Member = None):
+    await ctx.message.delete(delay=2)
     member = member or ctx.author
     embed = Embed(title=str(member), url=member.display_avatar.url)
     embed.set_image(url=member.display_avatar.url)
@@ -296,11 +299,12 @@ async def reaction(ctx):
 
 
 @bot.command()
-async def upload(ctx, directory="OurMemes"):
+async def upload(ctx, directory="ourMemes"):
+    await ctx.message.delete(delay=2)
     valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
         await ctx.send(
-            f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
+            f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=5
         )
         return
     command_attachments = ctx.message.attachments
@@ -322,20 +326,21 @@ async def upload(ctx, directory="OurMemes"):
         ]
     )
     if not all_items:
-        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
+        await ctx.send("No attachments or GIF links found to upload!", delete_after=5)
         return
     num_files = len(all_items)
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, directory) for item in all_items]
         await asyncio.gather(*tasks)
     if num_files == 1:
-        await ctx.send(f"1 file uploaded to {directory}", delete_after=10)
+        await ctx.send(f"1 file uploaded to {directory}", delete_after=5)
     else:
-        await ctx.send(f"{num_files} files uploaded to {directory}", delete_after=10)
+        await ctx.send(f"{num_files} files uploaded to {directory}", delete_after=5)
 
 
 @bot.command()
 async def ourmeme(ctx, media_type: str = None):
+    await ctx.message.delete(delay=2)
     valid_exts = {"image": (".png", ".jpg", ".gif"), "video": (".mp4", ".mov", ".mkv")}
     exts = valid_exts.get(
         media_type.lower() if media_type else None,
@@ -405,6 +410,7 @@ def deepfry_image(image: Image.Image, intensity: int) -> Image.Image:
 
 @bot.command()
 async def ascii(ctx):
+    await ctx.message.delete(delay=2)
     image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
@@ -416,6 +422,7 @@ async def ascii(ctx):
 
 @bot.command()
 async def pixelate(ctx, intensity: int = 5):
+    await ctx.message.delete(delay=2)
     if not 1 <= intensity <= 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
@@ -439,14 +446,19 @@ async def pixelate(ctx, intensity: int = 5):
 
 @bot.command()
 async def deepfry(ctx, intensity: int = 5):
-    if not 1 <= intensity <= 10:
-        await ctx.send("Intensity must be between 1 and 10.")
+    # Adjust intensity range to 1-50
+    if not 1 <= intensity <= 50:
+        await ctx.send("Intensity must be between 1 and 50.")
         return
     image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-    image = deepfry_image(image, intensity)
+
+    # Scale intensity to match original 1-10 range applied multiple times
+    scaled_intensity = intensity / 5  # Maps 1-50 to 1-10 for compatibility
+    image = deepfry_image(image, scaled_intensity)
+
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
     img_bytes.seek(0)
@@ -454,8 +466,26 @@ async def deepfry(ctx, intensity: int = 5):
     await ctx.send(f"Deepfried image (Intensity {intensity}):", file=file)
 
 
+def deepfry_image(image: Image.Image, scaled_intensity: float) -> Image.Image:
+    # Contrast enhancement: Scale from 1-10 to match original
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(1 + scaled_intensity / 5.0)  # Max 3.0 at intensity 50
+
+    # Add noise: Scale to match original ±50 at intensity 10, so ±250 at intensity 50
+    img_array = np.array(image)
+    noise = np.random.randint(
+        -scaled_intensity * 5, scaled_intensity * 5 + 1, img_array.shape, dtype=np.int16
+    )
+    img_array = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+    image = Image.fromarray(img_array)
+
+    # Apply blur: Scale to match original 2.0 at intensity 10, so 10.0 at intensity 50
+    return image.filter(ImageFilter.GaussianBlur(radius=scaled_intensity / 5.0))
+
+
 @bot.command()
 async def emojify(ctx, emoji_name: str = None):
+    await ctx.message.delete(delay=2)
     if not emoji_name:
         valid_extensions = (".png", ".jpg", ".jpeg", ".gif")
         emoji_files = [
@@ -502,6 +532,7 @@ async def emojify(ctx, emoji_name: str = None):
 
 @bot.command()
 async def caption(ctx, top_text: str = "", bottom_text: str = ""):
+    await ctx.message.delete(delay=2)
     image_url = None
     if ctx.message.attachments:
         image_url = ctx.message.attachments[0].url
@@ -629,6 +660,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
 # Voice Commands
 @bot.command()
 async def play(ctx, sound: str):
+    await ctx.message.delete(delay=2)
     sound_files = {"laugh": "laugh.mp3", "clap": "clap.mp3"}
     if sound not in sound_files:
         await ctx.send(
@@ -750,6 +782,7 @@ async def update(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def clearhistory(ctx):
+    await ctx.message.delete(delay=2)
     if not os.path.exists(HISTORY_DIR):
         await ctx.send("No history directory found!", delete_after=5)
         return
