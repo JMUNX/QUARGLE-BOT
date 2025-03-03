@@ -521,31 +521,6 @@ async def pixelate(ctx, intensity: int = 5):
 
 
 # Function to replace faces with emoji
-def replace_faces_with_emoji(image, emoji_path="emoji.png"):
-    # Convert the image to grayscale
-    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-
-    # Load the face detection classifier
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-
-    # Detect faces
-    faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
-
-    emoji = Image.open(emoji_path).resize((50, 50))  # Resize emoji to fit on the face
-
-    # Draw emoji faces
-    for x, y, w, h in faces:
-        # Place the emoji on the detected face
-        image.paste(emoji, (x, y), emoji.convert("RGBA"))
-
-    return image
-
-
-# Function to replace faces with emoji
 def replace_faces_with_emoji(image, emoji_path):
     # Convert the image to grayscale
     gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
@@ -560,12 +535,21 @@ def replace_faces_with_emoji(image, emoji_path):
         gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
     )
 
-    emoji = Image.open(emoji_path).resize((50, 50))  # Resize emoji to fit on the face
+    emoji = Image.open(emoji_path)
 
-    # Draw emoji faces
+    # Iterate through all the detected faces
     for x, y, w, h in faces:
-        # Place the emoji on the detected face
-        image.paste(emoji, (x, y), emoji.convert("RGBA"))
+        # Scale the emoji to fit the face size (adjust by a factor)
+        emoji_width = int(w * 0.6)  # Scale the emoji to 60% of the face width
+        emoji_height = int(h * 0.6)  # Scale the emoji to 60% of the face height
+        emoji_resized = emoji.resize((emoji_width, emoji_height))
+
+        # Calculate the position to center the emoji over the face
+        emoji_x = x + (w - emoji_width) // 2  # Center the emoji horizontally
+        emoji_y = y + (h - emoji_height) // 2  # Center the emoji vertically
+
+        # Paste the resized emoji onto the image
+        image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized.convert("RGBA"))
 
     return image
 
