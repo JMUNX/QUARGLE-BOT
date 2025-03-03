@@ -426,7 +426,7 @@ async def deepfry(ctx, intensity: int = 5):
         await ctx.send("Please upload or reply to an image.")
         return
 
-    # Deepfry effect (add noise, adjust contrast, apply filters)
+    # Apply the deepfry effect (contrast, noise, blur)
     image = deepfry_image(image, intensity)
 
     # Save the deepfried image in a BytesIO object
@@ -439,15 +439,6 @@ async def deepfry(ctx, intensity: int = 5):
 
 
 def deepfry_image(image: Image, intensity: int) -> Image:
-    # Apply pixelation effect
-    pixel_size = intensity * 5
-    image = image.resize(
-        (image.width // pixel_size, image.height // pixel_size), Image.NEAREST
-    )
-    image = image.resize(
-        (image.width * pixel_size, image.height * pixel_size), Image.NEAREST
-    )
-
     # Increase contrast to intensify the fried effect
     enhancer = ImageEnhance.Contrast(image)
     image = enhancer.enhance(2 + (intensity / 5))  # Higher intensity = more contrast
