@@ -664,10 +664,9 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
 async def play(ctx, sound: str = None, volume: int = 50):
     await ctx.message.delete(delay=2)
 
-    TARGET_CHANNEL_ID = 574410799557378048
+    TARGET_CHANNEL_ID = 475512390536921088
     voice_channel = bot.get_channel(TARGET_CHANNEL_ID)
 
-    # Check if the channel exists and is a voice channel
     if not voice_channel:
         await ctx.send("Voice channel not found! Check the channel ID.", delete_after=4)
         return
@@ -675,7 +674,6 @@ async def play(ctx, sound: str = None, volume: int = 50):
         await ctx.send("Target channel is not a voice channel!", delete_after=4)
         return
 
-    # List available sounds if none specified
     if not sound:
         valid_extensions = (".mp3", ".wav", ".ogg")
         sound_files = [
@@ -691,7 +689,7 @@ async def play(ctx, sound: str = None, volume: int = 50):
         description = "Use `.play <sound> [volume]` with one of these:\n\n" + "\n".join(
             f"- `{sound}`" for sound in sound_files
         )
-        embed = Embed(
+        embed = discord.Embed(
             title="Available Sounds",
             description=description[:1024],
             color=discord.Color.blue(),
@@ -699,17 +697,21 @@ async def play(ctx, sound: str = None, volume: int = 50):
         await ctx.send(embed=embed, delete_after=30)
         return
 
-    # Validate volume
     if not 1 <= volume <= 100:
         await ctx.send("Volume must be between 1 and 100.", delete_after=4)
         return
 
-    # Check Opus
     if not discord.opus.is_loaded():
         await ctx.send("Voice support unavailable! Opus not loaded.", delete_after=4)
+        logger.error("Opus library not loaded.")
+        return
+    if nacl is None:
+        await ctx.send(
+            "Voice support unavailable! PyNaCl not installed.", delete_after=4
+        )
+        logger.error("PyNaCl not installed. Install with 'pip install pynacl'.")
         return
 
-    # Construct sound path
     sound_path = os.path.join(SOUNDS_DIR, f"{sound}.mp3")
     if not os.path.exists(sound_path):
         for ext in (".wav", ".ogg"):
@@ -723,42 +725,48 @@ async def play(ctx, sound: str = None, volume: int = 50):
             )
             return
 
-    # Attempt to connect to the voice channel
+    logger.info(f"Attempting to play sound: {sound_path}")
+
     try:
         vc = await voice_channel.connect()
+        logger.info(f"Connected to voice channel {TARGET_CHANNEL_ID}")
     except discord.Forbidden:
-        await ctx.send(
-            "Bot lacks permission to join the voice channel!", delete_after=4
-        )
-        logger.error(f"Permission denied to join channel {TARGET_CHANNEL_ID}")
-        return
-    except discord.ClientException as e:
-        await ctx.send(
-            "Bot is already connected elsewhere or connection failed!", delete_after=4
-        )
-        logger.error(f"ClientException: {e}")
+        await ctx.send("Bot lacks permission to join!", delete_after=4)
+        logger.error(f"Permission denied to join {TARGET_CHANNEL_ID}")
         return
     except Exception as e:
         await ctx.send("Failed to join voice channel!", delete_after=4)
-        logger.error(
-            f"Failed to connect to {TARGET_CHANNEL_ID}: {type(e).__name__} - {str(e)}"
-        )
+        logger.error(f"Failed to connect: {type(e).__name__} - {str(e)}")
         return
 
-    # Play the sound
     try:
-        audio_source = discord.FFmpegPCMAudio(sound_path)
-        volume_adjusted = discord.PCMVolumeTransformer(
-            audio_source, volume=volume / 100.0
-        )
+        # Specify FFmpeg path if in project directory (adjust as needed)
+        ffmpeg_path = os.path.join(
+            os.getcwd(), "bin/ffmpeg"
+        )  # Example: 'bin/ffmpeg' or 'bin/ffmpeg.exe'
+        if not os.path.exists(ffmpeg_path):
+            ffmpeg_path = "ffmpeg"  # Default to system PATH if local copy isn’t found
+
+        audio_source = FFmpegPCMAudio(sound_path, executable=ffmpeg_path)
+        volume_adjusted = PCMVolumeTransformer(audio_source, volume=volume / 100.0)
+        logger.info(f"Playing {sound} at {volume}% volume")
         vc.play(volume_adjusted)
+
         while vc.is_playing():
             await asyncio.sleep(1)
+        logger.info(f"Finished playing {sound}")
+    except FileNotFoundError:
+        await ctx.send("FFmpeg not found! Check installation or PATH.", delete_after=4)
+        logger.error(f"FFmpeg not found at {ffmpeg_path}")
     except Exception as e:
-        logger.error(f"Error playing sound {sound}: {e}")
         await ctx.send("Failed to play sound!", delete_after=4)
+        logger.error(f"Error playing {sound_path}: {type(e).__name__} - {str(e)}")
     finally:
-        await vc.disconnect()
+        try:
+            await vc.disconnect()
+            logger.info(f"Disconnected from {TARGET_CHANNEL_ID}")
+        except Exception as e:
+            logger.error(f"Error disconnecting: {e}")
 
 
 # AI Feature Commands
