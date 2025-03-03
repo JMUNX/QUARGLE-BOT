@@ -20,6 +20,12 @@ from better_profanity import Profanity
 from PIL import Image, ImageDraw, ImageFont
 import io
 import discord.opus
+import discord
+from discord.ext import commands
+from PIL import Image, ImageDraw, ImageFont
+import io
+import cv2
+import numpy as np
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -410,6 +416,7 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
+# PIL STUFF
 # ASCII characters from most dense to least dense
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 ASCII_CHARS_SIMPLE = "@%#*+=-:. "
@@ -453,7 +460,7 @@ async def ascii(ctx):
 
 
 @bot.command()
-async def ascii_simple(ctx):
+async def asciisimple(ctx):
     image = None
     if ctx.message.attachments:
         image_bytes = await ctx.message.attachments[0].read()
@@ -509,6 +516,61 @@ async def pixelate(ctx, intensity: int = 5):
 
     file = discord.File(img_bytes, filename="pixelated.png")
     await ctx.send(f"Here is your pixelated image (Intensity {intensity}):", file=file)
+
+
+# Function to replace faces with emoji
+def replace_faces_with_emoji(image, emoji_path="emoji.png"):
+    # Convert the image to grayscale
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+
+    # Load the face detection classifier
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+
+    # Detect faces
+    faces = face_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+    )
+
+    emoji = Image.open(emoji_path).resize((50, 50))  # Resize emoji to fit on the face
+
+    # Draw emoji faces
+    for x, y, w, h in faces:
+        # Place the emoji on the detected face
+        image.paste(emoji, (x, y), emoji.convert("RGBA"))
+
+    return image
+
+
+@bot.command()
+async def emojiface(ctx):
+    # Check if there is an attachment or a replied image
+    image = None
+    if ctx.message.attachments:
+        image_bytes = await ctx.message.attachments[0].read()
+        image = Image.open(io.BytesIO(image_bytes))
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            image_bytes = await ref_msg.attachments[0].read()
+            image = Image.open(io.BytesIO(image_bytes))
+
+    if image is None:
+        await ctx.send("Please upload or reply to an image.")
+        return
+
+    # Replace faces with emojis
+    emoji_path = "path/to/emoji.png"  # Adjust the path to your emoji image
+    image = replace_faces_with_emoji(image, emoji_path)
+
+    # Save the resulting image to a BytesIO object
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+
+    file = discord.File(img_bytes, filename="emoji_faces.png")
+    await ctx.send("Here is your image with emoji faces:", file=file)
 
 
 @bot.command()
