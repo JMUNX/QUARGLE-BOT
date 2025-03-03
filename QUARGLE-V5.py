@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import io
 import cv2
 import numpy as np
-from typing import Optional
+from typing import Optional, Dict
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -62,7 +62,7 @@ os.makedirs(SAVES_FOLDER, exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
-last_bot_image = None  # Global to track bot's last posted image
+bot_images: Dict[int, Image.Image] = {}  # Map message IDs to bot images
 
 
 # Bot Lifecycle Events
@@ -78,7 +78,6 @@ async def on_ready():
         logger.warning("Voice features disabled.")
     else:
         logger.info("Voice features enabled.")
-
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
@@ -109,7 +108,7 @@ bot.on_close = close
 
 
 # File and Data Management Functions
-async def load_file(filename):
+async def load_file(filename: str) -> list:
     try:
         async with aiofiles.open(filename, "r", encoding="utf-8") as file:
             return [line.strip() async for line in file if line.strip()]
@@ -118,36 +117,35 @@ async def load_file(filename):
         return []
 
 
-async def preload_sources():
+async def preload_sources() -> dict:
     return {"memeSources": await load_file("memeSources.txt")}
 
 
-def get_history_file(user_id):
+def get_history_file(user_id: int) -> str:
     return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
 
 
-def get_saved_messages_file(user_id):
+def get_saved_messages_file(user_id: int) -> str:
     return os.path.join(SAVED_MESSAGES_DIR, f"user_{user_id}.json")
 
 
-async def load_conversation_history(user_id):
+async def load_conversation_history(user_id: int) -> list:
     file_path = get_history_file(user_id)
     if not os.path.exists(file_path):
         return []
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         lines = [line async for line in f]
-    history = [json.loads(line) for line in lines[-20:] if line.strip()]
-    return history
+    return [json.loads(line) for line in lines[-20:] if line.strip()]
 
 
-async def append_to_conversation_history(user_id, role, content):
+async def append_to_conversation_history(user_id: int, role: str, content: str) -> None:
     file_path = get_history_file(user_id)
     message = {"role": role, "content": content}
     async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
         await f.write(f"{json.dumps(message)}\n")
 
 
-async def write_system_message(user_id, content):
+async def write_system_message(user_id: int, content: str) -> None:
     file_path = get_history_file(user_id)
     system_msg = {"role": "system", "content": content}
     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
@@ -155,14 +153,14 @@ async def write_system_message(user_id, content):
 
 
 # Utility Functions
-async def check_permissions(ctx, permission):
+async def check_permissions(ctx, permission: str) -> bool:
     if not getattr(ctx.author.guild_permissions, permission, False):
         await ctx.send("You lack permission!", delete_after=2)
         return False
     return True
 
 
-async def cleanup_messages(command_msg, preview_msg):
+async def cleanup_messages(command_msg, preview_msg) -> None:
     await asyncio.sleep(30)
     try:
         await command_msg.delete()
@@ -171,45 +169,29 @@ async def cleanup_messages(command_msg, preview_msg):
         logger.debug(f"Failed to delete messages: {e}")
 
 
-async def save_attachment(item, session, directory):
+async def save_attachment(item, session: aiohttp.ClientSession, directory: str) -> None:
     async with session.get(item.url) as resp:
         if resp.status == 200:
             filename = os.path.join(directory, item.filename)
             async with aiofiles.open(filename, "wb") as f:
                 await f.write(await resp.read())
+        else:
+            logger.warning(f"Failed to fetch attachment from {item.url}: {resp.status}")
 
 
-async def get_image_from_context(ctx):
-    """Helper function to retrieve an image from message context."""
+async def get_image_from_context(ctx) -> Optional[Image.Image]:
     if ctx.message.attachments:
         return Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
             return Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
-        elif (
-            ref_msg.author == bot.user
-            and "last_bot_image" in globals()
-            and last_bot_image
-        ):
-            return last_bot_image
+        elif ref_msg.author == bot.user and ref_msg.id in bot_images:
+            return bot_images[ref_msg.id]
     return None
 
 
-async def get_bot_image_as_file(
-    last_image: Optional[Image.Image], filename: str = "bot_image.png"
-) -> Optional[File]:
-    """Convert stored bot image to a Discord File object."""
-    if last_image is None:
-        return None
-    img_bytes = io.BytesIO()
-    last_image.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
-    return File(img_bytes, filename=filename)
-
-
 async def save_image_data(image: Image.Image, directory: str, filename: str) -> None:
-    """Save a PIL Image directly to the specified directory."""
     file_path = os.path.join(directory, filename)
     async with aiofiles.open(file_path, "wb") as f:
         img_bytes = io.BytesIO()
@@ -255,33 +237,32 @@ async def getpfp(ctx, member: Member = None):
 async def meme(ctx):
     await ctx.message.delete(delay=1)
     embed = Embed()
-    async with bot.http_session as session:
-        for meme_url in random.sample(bot.memeSources, len(bot.memeSources)):
-            try:
-                async with session.get(
-                    meme_url, headers={"User-Agent": "meme-bot"}
-                ) as r:
-                    if r.status != 200:
-                        continue
-                    res = await r.json()
-                    memes = [
-                        post["data"]
-                        for post in res["data"]["children"]
-                        if "url" in post["data"]
-                        and not post["data"].get("is_video")
-                        and post["data"].get("is_reddit_media_domain")
-                        and not post["data"].get("over_18")
-                    ]
-                    if not memes:
-                        continue
-                    meme_data = random.choice(memes)
-                    embed.title = meme_data["title"][:256]
-                    embed.set_image(url=meme_data["url"])
-                    await ctx.send(embed=embed)
-                    return
-            except Exception as e:
-                logger.error(f"Meme fetch failed for {meme_url}: {e}")
-        await ctx.send("Failed to fetch meme!", delete_after=3)
+    for meme_url in random.sample(bot.memeSources, len(bot.memeSources)):
+        try:
+            async with bot.http_session.get(
+                meme_url, headers={"User-Agent": "meme-bot"}
+            ) as r:
+                if r.status != 200:
+                    continue
+                res = await r.json()
+                memes = [
+                    post["data"]
+                    for post in res["data"]["children"]
+                    if "url" in post["data"]
+                    and not post["data"].get("is_video")
+                    and post["data"].get("is_reddit_media_domain")
+                    and not post["data"].get("over_18")
+                ]
+                if not memes:
+                    continue
+                meme_data = random.choice(memes)
+                embed.title = meme_data["title"][:256]
+                embed.set_image(url=meme_data["url"])
+                await ctx.send(embed=embed)
+                return
+        except Exception as e:
+            logger.error(f"Meme fetch failed for {meme_url}: {e}")
+    await ctx.send("Failed to fetch meme!", delete_after=3)
 
 
 @bot.command()
@@ -304,25 +285,23 @@ async def reaction(ctx):
     ]
     search_term = urllib.parse.quote(" ".join(sanitized_message))
     tenor_url = f"https://tenor.com/search/{search_term}-gifs"
-    async with bot.http_session as session:
-        async with session.get(tenor_url) as response:
-            if response.status == 200:
-                html = await response.text()
-                soup = BeautifulSoup(html, "html.parser")
-                gif_img = soup.find("img", src=lambda x: x and ".gif" in x)
-                if gif_img and gif_img["src"]:
-                    embed.title = f"{ref_msg.author.name}: {ref_msg.content}"
-                    embed.set_image(url=gif_img["src"])
-                    await ref_msg.reply(embed=embed)
-                else:
-                    await ctx.send("No GIFs found.", delete_after=2)
+    async with bot.http_session.get(tenor_url) as response:
+        if response.status == 200:
+            html = await response.text()
+            soup = BeautifulSoup(html, "html.parser")
+            gif_img = soup.find("img", src=lambda x: x and ".gif" in x)
+            if gif_img and gif_img["src"]:
+                embed.title = f"{ref_msg.author.name}: {ref_msg.content}"
+                embed.set_image(url=gif_img["src"])
+                await ref_msg.reply(embed=embed)
             else:
-                await ctx.send("Failed to load Tenor page.", delete_after=2)
+                await ctx.send("No GIFs found.", delete_after=2)
+        else:
+            await ctx.send("Failed to load Tenor page.", delete_after=2)
 
 
 @bot.command()
 async def upload(ctx, directory=OURMEMES_FOLDER):
-    global last_bot_image
     valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
         await ctx.send(
@@ -330,7 +309,6 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         )
         return
 
-    # Collect attachments and URLs
     command_attachments = ctx.message.attachments
     ref_urls = []
     ref_attachments = []
@@ -338,7 +316,6 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
 
     logger.debug(f"Command attachments: {len(command_attachments)}")
 
-    # Handle referenced message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         ref_urls = [
@@ -347,29 +324,23 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             if word.lower().endswith((".gif", ".png", ".jpg", ".jpeg"))
         ]
         ref_attachments = ref_msg.attachments if ref_msg.author != bot.user else []
-
         logger.debug(
-            f"Referenced message by {ref_msg.author}, attachments: {len(ref_msg.attachments)}, URLs: {ref_urls}"
+            f"Ref msg by {ref_msg.author}, attachments: {len(ref_msg.attachments)}, URLs: {ref_urls}"
         )
 
-        # Check if it's a bot message with an attachment
-        if ref_msg.author == bot.user:
-            if ref_msg.attachments and "last_bot_image" in globals() and last_bot_image:
-                bot_image_to_upload = {
-                    "image": last_bot_image,
-                    "filename": (
-                        ref_msg.attachments[0].filename
-                        if ref_msg.attachments
-                        else f"bot_image_{ref_msg.id}.png"
-                    ),
-                }
-                logger.debug(
-                    f"Bot image detected for upload: {bot_image_to_upload['filename']}"
-                )
-            else:
-                logger.debug("Bot message referenced, but no last_bot_image available")
+        if ref_msg.author == bot.user and ref_msg.id in bot_images:
+            bot_image_to_upload = {
+                "image": bot_images[ref_msg.id],
+                "filename": (
+                    ref_msg.attachments[0].filename
+                    if ref_msg.attachments
+                    else f"bot_image_{ref_msg.id}.png"
+                ),
+            }
+            logger.debug(f"Bot image detected: {bot_image_to_upload['filename']}")
+        elif ref_msg.author == bot.user:
+            logger.debug("Bot message referenced, but no image stored")
 
-    # Combine regular items (attachments and URLs)
     all_items = (
         command_attachments
         + ref_attachments
@@ -378,26 +349,29 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             for url in ref_urls
         ]
     )
-
     logger.debug(f"Regular items to upload: {len(all_items)}")
 
-    # Handle uploads
     uploaded_count = 0
-    async with aiohttp.ClientSession() as session:
-        if all_items:
-            tasks = [save_attachment(item, session, directory) for item in all_items]
-            await asyncio.gather(*tasks)
-            uploaded_count += len(tasks)
-
-        if bot_image_to_upload:
-            await save_image_data(
-                bot_image_to_upload["image"], directory, bot_image_to_upload["filename"]
-            )
-            uploaded_count += 1
+    if all_items:
+        tasks = [
+            save_attachment(item, bot.http_session, directory) for item in all_items
+        ]
+        await asyncio.gather(*tasks)
+        uploaded_count += len(tasks)
+    if bot_image_to_upload:
+        await save_image_data(
+            bot_image_to_upload["image"], directory, bot_image_to_upload["filename"]
+        )
+        uploaded_count += 1
 
     if uploaded_count == 0:
-        logger.debug("No items found to upload")
-        await ctx.send("No attachments or valid links found!", delete_after=4)
+        error_msg = (
+            "No attachments or valid links found!"
+            if not bot_image_to_upload
+            else "Bot image unavailable!"
+        )
+        logger.debug(error_msg)
+        await ctx.send(error_msg, delete_after=4)
         return
 
     await ctx.send(f"{uploaded_count} file(s) uploaded to {directory}", delete_after=10)
@@ -431,7 +405,7 @@ async def ourmeme(ctx, media_type: str = None):
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 
 
-def image_to_ascii(image, width=50, dense=True):
+def image_to_ascii(image: Image.Image, width: int = 50, dense: bool = True) -> str:
     aspect_ratio = image.height / image.width
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
@@ -443,7 +417,7 @@ def image_to_ascii(image, width=50, dense=True):
     return "\n".join(ascii_str[i : i + width] for i in range(0, len(ascii_str), width))
 
 
-def replace_faces_with_emoji(image, emoji_path):
+def replace_faces_with_emoji(image: Image.Image, emoji_path: str) -> Image.Image:
     gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
     face_cascade = cv2.CascadeClassifier(
         cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -460,25 +434,16 @@ def replace_faces_with_emoji(image, emoji_path):
     return image
 
 
-def deepfry_image(image: Image, intensity: int) -> Image:
-    """Optimized deepfry function using NumPy for faster pixel manipulation."""
+def deepfry_image(image: Image.Image, intensity: int) -> Image.Image:
     enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(
-        1 + (intensity / 5)
-    )  # Reduced max contrast for performance
-
-    # Convert to NumPy array for vectorized operations
+    image = enhancer.enhance(1 + intensity / 5.0)
     img_array = np.array(image)
     noise = np.random.randint(
         -intensity * 5, intensity * 5 + 1, img_array.shape, dtype=np.int16
     )
     img_array = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-
     image = Image.fromarray(img_array)
-    image = image.filter(
-        ImageFilter.GaussianBlur(radius=intensity / 5)
-    )  # Reduced blur radius
-    return image
+    return image.filter(ImageFilter.GaussianBlur(radius=intensity / 5.0))
 
 
 @bot.command()
@@ -487,14 +452,14 @@ async def ascii(ctx):
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-    ascii_art = image_to_ascii(image, width=100, dense=True)
+    ascii_art = image_to_ascii(image, width=100)
     file = File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
     await ctx.send("Detailed ASCII art:", file=file)
 
 
 @bot.command()
 async def pixelate(ctx, intensity: int = 5):
-    if intensity < 1 or intensity > 10:
+    if not 1 <= intensity <= 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
     image = await get_image_from_context(ctx)
@@ -517,7 +482,7 @@ async def pixelate(ctx, intensity: int = 5):
 
 @bot.command()
 async def deepfry(ctx, intensity: int = 5):
-    if intensity < 1 or intensity > 10:
+    if not 1 <= intensity <= 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
     image = await get_image_from_context(ctx)
@@ -551,10 +516,10 @@ async def emojify(ctx, emoji_name: str = None):
             "chad": "<:chad:1345942227800817755>",
         }
         default_preview = "🙂"
-        description = "Use `.emojify <emoji_name>` with one of these:\n\n"
-        for emoji in emoji_files:
-            preview = emoji_previews.get(emoji.lower(), default_preview)
-            description += f"- {preview} `{emoji}`\n"
+        description = "Use `.emojify <emoji_name>` with one of these:\n\n" + "\n".join(
+            f"- {emoji_previews.get(emoji.lower(), default_preview)} `{emoji}`"
+            for emoji in emoji_files
+        )
         embed = Embed(
             title="Available Emojis",
             description=description[:1024],
@@ -600,12 +565,11 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     if not image_url:
         await ctx.send("Please attach or reply to an image!", delete_after=4)
         return
-    async with aiohttp.ClientSession() as session:
-        async with session.get(image_url) as resp:
-            if resp.status != 200:
-                await ctx.send("Failed to fetch image!", delete_after=4)
-                return
-            image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
+    async with bot.http_session.get(image_url) as resp:
+        if resp.status != 200:
+            await ctx.send("Failed to fetch image!", delete_after=4)
+            return
+        image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
     draw = ImageDraw.Draw(image)
     width, height = image.size
     font_path = "comicz.ttf"
@@ -735,8 +699,7 @@ async def play(ctx, sound: str):
 # AI Feature Commands
 @bot.command()
 async def setcontext(ctx, *, new_context: str):
-    user_id = ctx.author.id
-    user_preferences[user_id] = new_context
+    user_preferences[ctx.author.id] = new_context
     await ctx.send(f"Context updated: {new_context}", delete_after=5)
 
 
@@ -857,16 +820,21 @@ async def clearhistory_error(ctx, error):
 # Event Handlers
 @bot.event
 async def on_message(message):
-    global last_bot_image
     if message.author == bot.user and message.attachments:
         try:
-            last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+            bot_images[message.id] = Image.open(
+                io.BytesIO(await message.attachments[0].read())
+            )
             logger.debug(
                 f"Stored bot image from message {message.id}: {message.attachments[0].filename}"
             )
+            # Optional: Clean up old images to manage memory
+            if len(bot_images) > 10:
+                oldest_id = min(bot_images.keys())
+                del bot_images[oldest_id]
+                logger.debug(f"Removed old bot image {oldest_id} to manage memory")
         except Exception as e:
             logger.error(f"Failed to store bot image from message {message.id}: {e}")
-            last_bot_image = None
     await bot.process_commands(message)
 
 
