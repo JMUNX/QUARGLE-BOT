@@ -455,9 +455,9 @@ def deepfry_image(image: Image, intensity: int) -> Image:
         for j in range(height):
             r, g, b = pixels[i, j]
             # Add random noise to RGB values
-            r = min(255, max(0, r + random.randint(-intensity, intensity)))
-            g = min(255, max(0, g + random.randint(-intensity, intensity)))
-            b = min(255, max(0, b + random.randint(-intensity, intensity)))
+            r = min(254, max(0, r + random.randint(-intensity, intensity)))
+            g = min(254, max(0, g + random.randint(-intensity, intensity)))
+            b = min(254, max(0, b + random.randint(-intensity, intensity)))
             pixels[i, j] = (r, g, b)
 
     # Apply a subtle blur to make the effect even more chaotic
