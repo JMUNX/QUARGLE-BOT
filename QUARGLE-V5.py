@@ -208,6 +208,17 @@ async def get_bot_image_as_file(
     return File(img_bytes, filename=filename)
 
 
+async def save_image_data(image: Image.Image, directory: str, filename: str) -> None:
+    """Save a PIL Image directly to the specified directory."""
+    file_path = os.path.join(directory, filename)
+    async with aiofiles.open(file_path, "wb") as f:
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
+        await f.write(img_bytes.getvalue())
+    logger.debug(f"Saved image to {file_path}")
+
+
 # Utility Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -311,6 +322,7 @@ async def reaction(ctx):
 
 @bot.command()
 async def upload(ctx, directory=OURMEMES_FOLDER):
+    global last_bot_image
     valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
         await ctx.send(
@@ -318,11 +330,13 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         )
         return
 
-    # Collect attachments from the command message
+    # Collect attachments and URLs
     command_attachments = ctx.message.attachments
     ref_urls = []
     ref_attachments = []
-    bot_image_file = None
+    bot_image_to_upload = None
+
+    logger.debug(f"Command attachments: {len(command_attachments)}")
 
     # Handle referenced message
     if ctx.message.reference:
@@ -334,18 +348,28 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         ]
         ref_attachments = ref_msg.attachments if ref_msg.author != bot.user else []
 
-        # If the referenced message is from the bot and has an attachment
-        if (
-            ref_msg.author == bot.user
-            and ref_msg.attachments
-            and "last_bot_image" in globals()
-            and last_bot_image
-        ):
-            bot_image_file = await get_bot_image_as_file(
-                last_bot_image, ref_msg.attachments[0].filename
-            )
+        logger.debug(
+            f"Referenced message by {ref_msg.author}, attachments: {len(ref_msg.attachments)}, URLs: {ref_urls}"
+        )
 
-    # Combine all items to upload
+        # Check if it's a bot message with an attachment
+        if ref_msg.author == bot.user:
+            if ref_msg.attachments and "last_bot_image" in globals() and last_bot_image:
+                bot_image_to_upload = {
+                    "image": last_bot_image,
+                    "filename": (
+                        ref_msg.attachments[0].filename
+                        if ref_msg.attachments
+                        else f"bot_image_{ref_msg.id}.png"
+                    ),
+                }
+                logger.debug(
+                    f"Bot image detected for upload: {bot_image_to_upload['filename']}"
+                )
+            else:
+                logger.debug("Bot message referenced, but no last_bot_image available")
+
+    # Combine regular items (attachments and URLs)
     all_items = (
         command_attachments
         + ref_attachments
@@ -355,34 +379,28 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         ]
     )
 
-    # Add bot image if available
-    if bot_image_file:
-        # Temporarily save bot image to disk to use with save_attachment
-        temp_path = os.path.join(directory, bot_image_file.filename)
-        with open(temp_path, "wb") as f:
-            f.write(bot_image_file.fp.read())
-        all_items.append(
-            type(
-                "obj",
-                (),
-                {"url": f"file://{temp_path}", "filename": bot_image_file.filename},
-            )()
-        )
+    logger.debug(f"Regular items to upload: {len(all_items)}")
 
-    if not all_items:
+    # Handle uploads
+    uploaded_count = 0
+    async with aiohttp.ClientSession() as session:
+        if all_items:
+            tasks = [save_attachment(item, session, directory) for item in all_items]
+            await asyncio.gather(*tasks)
+            uploaded_count += len(tasks)
+
+        if bot_image_to_upload:
+            await save_image_data(
+                bot_image_to_upload["image"], directory, bot_image_to_upload["filename"]
+            )
+            uploaded_count += 1
+
+    if uploaded_count == 0:
+        logger.debug("No items found to upload")
         await ctx.send("No attachments or valid links found!", delete_after=4)
         return
 
-    # Upload all items
-    async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(item, session, directory) for item in all_items]
-        await asyncio.gather(*tasks)
-
-    # Clean up temporary bot image file if it was created
-    if bot_image_file and os.path.exists(temp_path):
-        os.remove(temp_path)
-
-    await ctx.send(f"{len(tasks)} file(s) uploaded to {directory}", delete_after=10)
+    await ctx.send(f"{uploaded_count} file(s) uploaded to {directory}", delete_after=10)
 
 
 @bot.command()
@@ -843,9 +861,11 @@ async def on_message(message):
     if message.author == bot.user and message.attachments:
         try:
             last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
-            logger.debug(f"Stored bot image: {message.attachments[0].filename}")
+            logger.debug(
+                f"Stored bot image from message {message.id}: {message.attachments[0].filename}"
+            )
         except Exception as e:
-            logger.error(f"Failed to store bot image: {e}")
+            logger.error(f"Failed to store bot image from message {message.id}: {e}")
             last_bot_image = None
     await bot.process_commands(message)
 
