@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import cv2
 import numpy as np
+from PIL import Image, ImageEnhance, ImageFilter
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -405,6 +406,69 @@ async def pixelate(ctx, intensity: int = 5):
     img_bytes.seek(0)
     file = File(img_bytes, filename="pixelated.png")
     await ctx.send(f"Pixelated image (Intensity {intensity}):", file=file)
+
+
+@bot.command()
+async def deepfry(ctx, intensity: int = 5):
+    if intensity < 1 or intensity > 10:
+        await ctx.send("Intensity must be between 1 and 10.")
+        return
+
+    image = None
+    if ctx.message.attachments:
+        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
+
+    if image is None:
+        await ctx.send("Please upload or reply to an image.")
+        return
+
+    # Deepfry effect (add noise, adjust contrast, apply filters)
+    image = deepfry_image(image, intensity)
+
+    # Save the deepfried image in a BytesIO object
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    file = File(img_bytes, filename="deepfried.png")
+
+    await ctx.send(f"Deepfried image (Intensity {intensity}):", file=file)
+
+
+def deepfry_image(image: Image, intensity: int) -> Image:
+    # Apply pixelation effect
+    pixel_size = intensity * 5
+    image = image.resize(
+        (image.width // pixel_size, image.height // pixel_size), Image.NEAREST
+    )
+    image = image.resize(
+        (image.width * pixel_size, image.height * pixel_size), Image.NEAREST
+    )
+
+    # Increase contrast to intensify the fried effect
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2 + (intensity / 5))  # Higher intensity = more contrast
+
+    # Add random noise to the image for more distortion
+    width, height = image.size
+    pixels = image.load()
+
+    for i in range(width):
+        for j in range(height):
+            r, g, b = pixels[i, j]
+            # Add random noise to RGB values
+            r = min(255, max(0, r + random.randint(-intensity, intensity)))
+            g = min(255, max(0, g + random.randint(-intensity, intensity)))
+            b = min(255, max(0, b + random.randint(-intensity, intensity)))
+            pixels[i, j] = (r, g, b)
+
+    # Apply a subtle blur to make the effect even more chaotic
+    image = image.filter(ImageFilter.GaussianBlur(radius=intensity / 3))
+
+    return image
 
 
 @bot.command()
