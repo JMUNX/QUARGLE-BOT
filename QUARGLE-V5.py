@@ -54,7 +54,7 @@ HISTORY_DIR = "conversationHistory"
 SAVED_MESSAGES_DIR = "savedMessages"
 EMOJI_FOLDER = "emojisFolder"
 os.makedirs(HISTORY_DIR, exist_ok=True)
-os.makedirs("OurMemes", exist_ok=True)
+os.makedirs("ourMemes", exist_ok=True)
 os.makedirs("Saves", exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
@@ -276,8 +276,8 @@ async def reaction(ctx):
 
 
 @bot.command()
-async def upload(ctx, directory="OurMemes"):
-    valid_dirs = ["OurMemes", "Saves", "Emojis"]
+async def upload(ctx, directory="ourMemes"):
+    valid_dirs = ["ourMemes", "Saves", "Emojis"]
     if directory not in valid_dirs:
         await ctx.send(
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
@@ -310,11 +310,11 @@ async def ourmeme(ctx, media_type: str = None):
         media_type.lower() if media_type else None,
         valid_exts["image"] + valid_exts["video"],
     )
-    files = [f for f in os.listdir("OurMemes") if f.lower().endswith(exts)]
+    files = [f for f in os.listdir("ourMemes") if f.lower().endswith(exts)]
     if not files:
         await ctx.send(f"No {media_type or 'memes'} found!", delete_after=2)
         return
-    file_path = os.path.join("OurMemes", random.choice(files))
+    file_path = os.path.join("ourMemes", random.choice(files))
     titles = await load_file("Oldwordlist.txt")
     title = random.choice(titles) if titles else "Random Meme"
     file = File(file_path)
@@ -679,7 +679,7 @@ COMMAND_CATEGORIES = {
         "meme": "Posts a random Reddit meme",
         "reaction": "Replies with a GIF to a referenced message",
         "ourmeme": "Shares a random local meme (image/video)",
-        "upload": "Uploads attachments to OurMemes or Saves",
+        "upload": "Uploads attachments to ourMemes, Saves or emojis",
         "ascii": "Converts image to detailed ASCII art",
         "pixelate": "Pixelates an image (intensity 1-10)",
         "emojify": "Replaces faces in image with an emoji",
