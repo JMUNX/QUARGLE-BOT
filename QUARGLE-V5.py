@@ -19,11 +19,6 @@ import logging
 from better_profanity import Profanity
 from PIL import Image, ImageDraw, ImageFont
 import io
-import discord.opus
-import discord
-from discord.ext import commands
-from PIL import Image, ImageDraw, ImageFont
-import io
 import cv2
 import numpy as np
 
@@ -61,45 +56,38 @@ EMOJI_FOLDER = "Emojis"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)
 os.makedirs("Saves", exist_ok=True)
-os.makedirs("Emojis", exist_ok=True)
+os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
 
 
 # Bot Lifecycle Events
 @bot.event
-# Handles bot startup and announcement
 async def on_ready():
-    # Load Opus from known working path
     opus_path = "/usr/lib/x86_64-linux-gnu/libopus.so"
     try:
         if not discord.opus.is_loaded():
             discord.opus.load_opus(opus_path)
         logger.info(f"Opus loaded successfully from {opus_path}")
     except Exception as e:
-        logger.error(f"Failed to load Opus from {opus_path}: {e}")
-        logger.warning(
-            "Voice features (.play) will be disabled due to Opus loading failure."
-        )
+        logger.error(f"Failed to load Opus: {e}")
+        logger.warning("Voice features disabled.")
     else:
-        logger.info("Voice features enabled with Opus.")
+        logger.info("Voice features enabled.")
 
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
         version = "69.420.25"
-        embed = discord.Embed(
+        embed = Embed(
             title="Quargle is online",
             description=f"{version} is now live",
             color=discord.Color.red(),
         )
         await channel.send(embed=embed, delete_after=5)
-    else:
-        logger.error("Channel 1345184113623040051 not found")
 
 
 @bot.event
-# Sets up bot resources on startup
 async def setup_hook():
     bot.http_session = aiohttp.ClientSession()
     bot.executor = executor
@@ -107,7 +95,6 @@ async def setup_hook():
     bot.memeSources = bot.sources["memeSources"]
 
 
-# Closes bot resources on shutdown
 async def close():
     if hasattr(bot, "http_session") and not bot.http_session.closed:
         await bot.http_session.close()
@@ -118,7 +105,6 @@ bot.on_close = close
 
 
 # File and Data Management Functions
-# Loads lines from a file asynchronously
 async def load_file(filename):
     try:
         async with aiofiles.open(filename, "r", encoding="utf-8") as file:
@@ -128,42 +114,28 @@ async def load_file(filename):
         return []
 
 
-# Preloads meme sources from file
 async def preload_sources():
-    return {
-        "memeSources": await load_file("memeSources.txt"),
-    }
+    return {"memeSources": await load_file("memeSources.txt")}
 
 
-# Returns path to user’s conversation history file
 def get_history_file(user_id):
     return os.path.join(HISTORY_DIR, f"user_{user_id}.txt")
 
 
-# Returns path to user’s saved messages file
 def get_saved_messages_file(user_id):
     return os.path.join(SAVED_MESSAGES_DIR, f"user_{user_id}.json")
 
 
-# Loads recent conversation history for a user
 async def load_conversation_history(user_id):
     file_path = get_history_file(user_id)
     if not os.path.exists(file_path):
         return []
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         lines = [line async for line in f]
-    history = []
-    for line in lines[-20:]:
-        if line.strip():
-            try:
-                message = json.loads(line)
-                history.append(message)
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON in history file: {line}")
+    history = [json.loads(line) for line in lines[-20:] if line.strip()]
     return history
 
 
-# Appends a message to user’s conversation history
 async def append_to_conversation_history(user_id, role, content):
     file_path = get_history_file(user_id)
     message = {"role": role, "content": content}
@@ -171,7 +143,6 @@ async def append_to_conversation_history(user_id, role, content):
         await f.write(f"{json.dumps(message)}\n")
 
 
-# Writes a system message to user’s history file
 async def write_system_message(user_id, content):
     file_path = get_history_file(user_id)
     system_msg = {"role": "system", "content": content}
@@ -180,7 +151,6 @@ async def write_system_message(user_id, content):
 
 
 # Utility Functions
-# Checks if user has a specific permission
 async def check_permissions(ctx, permission):
     if not getattr(ctx.author.guild_permissions, permission, False):
         await ctx.send("You lack permission!", delete_after=2)
@@ -188,18 +158,15 @@ async def check_permissions(ctx, permission):
     return True
 
 
-# Cleans up messages after a delay
 async def cleanup_messages(command_msg, preview_msg):
     await asyncio.sleep(30)
     try:
         await command_msg.delete()
         await preview_msg.delete()
     except Exception as e:
-        logger.debug(f"Failed to delete preview messages: {e}")
+        logger.debug(f"Failed to delete messages: {e}")
 
 
-# Media Handling Functions
-# Saves an attachment or URL to a directory
 async def save_attachment(item, session, directory):
     async with session.get(item.url) as resp:
         if resp.status == 200:
@@ -208,13 +175,12 @@ async def save_attachment(item, session, directory):
                 await f.write(await resp.read())
 
 
-# Utility Commands
+# Utilities Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
-# Deletes a specified number of messages
 async def clear(ctx, amount: int):
     if amount > 200:
-        await ctx.send("I WON'T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
+        await ctx.send("I WON’T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
         return
     await ctx.send(f"Deleting {amount} messages...", delete_after=2)
     deleted = await ctx.channel.purge(limit=amount, bulk=True)
@@ -222,20 +188,17 @@ async def clear(ctx, amount: int):
 
 
 @clear.error
-# Handles permission errors for clear command
 async def clear_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("You need Manage Messages permission!", delete_after=2)
 
 
 @bot.command()
-# Sends a debug message
 async def debug(ctx):
     await ctx.send("Debug", delete_after=5)
 
 
 @bot.command()
-# Displays a user’s profile picture
 async def getpfp(ctx, member: Member = None):
     member = member or ctx.author
     embed = Embed(title=str(member), url=member.display_avatar.url)
@@ -244,7 +207,6 @@ async def getpfp(ctx, member: Member = None):
 
 
 @bot.command()
-# Fetches and displays weather forecast for a city
 async def weather(ctx, *, city=""):
     if not city:
         await ctx.send("City is missing", delete_after=1)
@@ -255,8 +217,7 @@ async def weather(ctx, *, city=""):
             current_temp = weather.temperature
             forecast_msg = [f"Current temperature in {city}: {current_temp}°F"]
             forecast_msg.extend(
-                f"{daily.date.strftime('%m/%d')}: High: {daily.highest_temperature}°F, "
-                f"Low: {daily.lowest_temperature}°F, Sunset: {daily.sunset.strftime('%I:%M %p')}"
+                f"{daily.date.strftime('%m/%d')}: High: {daily.highest_temperature}°F, Low: {daily.lowest_temperature}°F, Sunset: {daily.sunset.strftime('%I:%M %p')}"
                 for daily in weather.daily_forecasts[:3]
             )
             await ctx.send("\n".join(forecast_msg))
@@ -265,9 +226,8 @@ async def weather(ctx, *, city=""):
             await ctx.send("Failed to fetch weather data.", delete_after=2)
 
 
-# Memes and Fun Commands
+# Memes & Fun Commands
 @bot.command()
-# Sends a freaky message to a specific channel
 async def freak(ctx):
     await ctx.message.delete(delay=1)
     target = (
@@ -277,7 +237,7 @@ async def freak(ctx):
     mention = target.mention if target else "nobody in particular"
     channel = bot.get_channel(656690392049385484)
     if channel:
-        embed = discord.Embed(
+        embed = Embed(
             title="😈freak mode activated😈",
             description=f"Im gonna touch you, {mention}",
             color=discord.Color.red(),
@@ -287,7 +247,6 @@ async def freak(ctx):
 
 
 @bot.command()
-# Fetches and posts a random Reddit meme
 async def meme(ctx):
     await ctx.message.delete(delay=1)
     embed = Embed()
@@ -317,22 +276,19 @@ async def meme(ctx):
                     return
             except Exception as e:
                 logger.error(f"Meme fetch failed for {meme_url}: {e}")
-        await ctx.send("Failed to fetch meme. Try again later!", delete_after=3)
+        await ctx.send("Failed to fetch meme!", delete_after=3)
 
 
 @bot.command()
-# Replies with a GIF based on a referenced message
 async def reaction(ctx):
     await ctx.message.delete(delay=1)
     if not ctx.message.reference:
-        await ctx.send("No message was referenced.", delete_after=2)
+        await ctx.send("No message referenced.", delete_after=2)
         return
     ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-    original_message = ref_msg.content
-    username = ref_msg.author.name
     embed = Embed()
     replacements = {"cunt": "jerk", "nazi": "creep", "retard": "goof"}
-    words = original_message.split()
+    words = ref_msg.content.split()
     sanitized_message = [
         (
             replacements.get(word.lower(), word).capitalize()
@@ -341,8 +297,7 @@ async def reaction(ctx):
         )
         for word in words
     ]
-    sanitized_message = " ".join(sanitized_message)
-    search_term = urllib.parse.quote(sanitized_message)
+    search_term = urllib.parse.quote(" ".join(sanitized_message))
     tenor_url = f"https://tenor.com/search/{search_term}-gifs"
     async with bot.http_session as session:
         async with session.get(tenor_url) as response:
@@ -351,7 +306,7 @@ async def reaction(ctx):
                 soup = BeautifulSoup(html, "html.parser")
                 gif_img = soup.find("img", src=lambda x: x and ".gif" in x)
                 if gif_img and gif_img["src"]:
-                    embed.title = f"{username}: {original_message}"
+                    embed.title = f"{ref_msg.author.name}: {ref_msg.content}"
                     embed.set_image(url=gif_img["src"])
                     await ref_msg.reply(embed=embed)
                 else:
@@ -361,7 +316,6 @@ async def reaction(ctx):
 
 
 @bot.command()
-# Uploads attachments or GIF URLs to specified directory
 async def upload(ctx, directory="OurMemes"):
     valid_dirs = ["OurMemes", "Saves"]
     if directory not in valid_dirs:
@@ -381,20 +335,15 @@ async def upload(ctx, directory="OurMemes"):
         for url in ref_urls
     ]
     if not all_items:
-        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
+        await ctx.send("No attachments or GIF links found!", delete_after=4)
         return
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, directory) for item in all_items]
         await asyncio.gather(*tasks)
-    num_files = len(tasks)
-    if num_files == 1:
-        await ctx.send(f"1 file uploaded to {directory}", delete_after=10)
-    else:
-        await ctx.send(f"{num_files} files uploaded to {directory}", delete_after=10)
+    await ctx.send(f"{len(tasks)} file(s) uploaded to {directory}", delete_after=10)
 
 
 @bot.command()
-# Shares a random meme from OurMemes directory
 async def ourmeme(ctx, media_type: str = None):
     valid_exts = {"image": (".png", ".jpg", ".gif"), "video": (".mp4", ".mov", ".mkv")}
     exts = valid_exts.get(
@@ -418,8 +367,7 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
-# PIL STUFF
-# ASCII characters from most dense to least dense
+# PIL Functions for Memes & Fun
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 ASCII_CHARS_SIMPLE = "@%#*+=-:. "
 
@@ -428,210 +376,155 @@ def image_to_ascii(image, width=50, dense=True):
     aspect_ratio = image.height / image.width
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
-
     ascii_chars = ASCII_CHARS_DENSE if dense else ASCII_CHARS_SIMPLE
     ascii_str = "".join(
         ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in image.getdata()
     )
-    ascii_str = "\n".join(
-        ascii_str[i : i + width] for i in range(0, len(ascii_str), width)
-    )
+    return "\n".join(ascii_str[i : i + width] for i in range(0, len(ascii_str), width))
 
-    return ascii_str
+
+def replace_faces_with_emoji(image, emoji_path):
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    faces = face_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+    )
+    emoji = Image.open(emoji_path).convert("RGBA")
+    for x, y, w, h in faces:
+        emoji_resized = emoji.resize(
+            (int(w * 1.2), int(h * 1.2)), Image.LANCZOS
+        )  # Scale to 120% for better coverage
+        emoji_x = x + (w - emoji_resized.width) // 2
+        emoji_y = y + (h - emoji_resized.height) // 2
+        image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized)
+    return image
 
 
 @bot.command()
 async def ascii(ctx):
     image = None
     if ctx.message.attachments:
-        image_bytes = await ctx.message.attachments[0].read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
-            image_bytes = await ref_msg.attachments[0].read()
-            image = Image.open(io.BytesIO(image_bytes))
-
+            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
     ascii_art = image_to_ascii(image, width=100, dense=True)
-    file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
-    await ctx.send("Here is your detailed ASCII art:", file=file)
+    file = File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
+    await ctx.send("Detailed ASCII art:", file=file)
 
 
 @bot.command()
 async def asciisimple(ctx):
     image = None
     if ctx.message.attachments:
-        image_bytes = await ctx.message.attachments[0].read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
-            image_bytes = await ref_msg.attachments[0].read()
-            image = Image.open(io.BytesIO(image_bytes))
-
+            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
     ascii_art = image_to_ascii(image, width=50, dense=False)
-    file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_simple.txt")
-    await ctx.send("Here is your simplified ASCII art:", file=file)
+    file = File(io.BytesIO(ascii_art.encode()), filename="ascii_simple.txt")
+    await ctx.send("Simplified ASCII art:", file=file)
 
 
 @bot.command()
 async def pixelate(ctx, intensity: int = 5):
     if intensity < 1 or intensity > 10:
-        await ctx.send("Please choose an intensity between 1 and 10.")
+        await ctx.send("Intensity must be between 1 and 10.")
         return
-
     image = None
     if ctx.message.attachments:
-        image_bytes = await ctx.message.attachments[0].read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
-            image_bytes = await ref_msg.attachments[0].read()
-            image = Image.open(io.BytesIO(image_bytes))
-
+            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
-    pixel_size = (
-        intensity * 5
-    )  # Adjust pixelation level based on intensity (range 5 to 50)
+    pixel_size = intensity * 5
     image = image.resize(
         (image.width // pixel_size, image.height // pixel_size), Image.NEAREST
     )
     image = image.resize(
         (image.width * pixel_size, image.height * pixel_size), Image.NEAREST
     )
-
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
     img_bytes.seek(0)
-
-    file = discord.File(img_bytes, filename="pixelated.png")
-    await ctx.send(f"Here is your pixelated image (Intensity {intensity}):", file=file)
-
-
-# Function to replace faces with emoji
-def replace_faces_with_emoji(image, emoji_path):
-    # Convert the image to grayscale
-    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-
-    # Load the face detection classifier
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-
-    # Detect faces
-    faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
-
-    emoji = Image.open(emoji_path)
-
-    # Iterate through all the detected faces
-    for x, y, w, h in faces:
-        # Scale the emoji to fit the face size (adjust by a factor)
-        emoji_width = int(w * 0.6)  # Scale the emoji to 60% of the face width
-        emoji_height = int(h * 0.6)  # Scale the emoji to 60% of the face height
-        emoji_resized = emoji.resize((emoji_width, emoji_height))
-
-        # Calculate the position to center the emoji over the face
-        emoji_x = x + (w - emoji_width) // 2  # Center the emoji horizontally
-        emoji_y = y + (h - emoji_height) // 2  # Center the emoji vertically
-
-        # Paste the resized emoji onto the image
-        image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized.convert("RGBA"))
-
-    return image
+    file = File(img_bytes, filename="pixelated.png")
+    await ctx.send(f"Pixelated image (Intensity {intensity}):", file=file)
 
 
 @bot.command()
 async def emojiface(ctx, emoji_name: str):
-    # Check if the emoji file exists in the emojis folder
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
-
     if not os.path.exists(emoji_path):
-        await ctx.send(
-            f"Emoji `{emoji_name}` not found. Please make sure the file exists in the `/emojis/` folder."
-        )
+        await ctx.send(f"Emoji `{emoji_name}` not found in `/emojis/` folder.")
         return
-
-    # Check if there is an attachment or a replied image
     image = None
     if ctx.message.attachments:
-        image_bytes = await ctx.message.attachments[0].read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
-            image_bytes = await ref_msg.attachments[0].read()
-            image = Image.open(io.BytesIO(image_bytes))
-
+            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
-    # Replace faces with the selected emoji
     image = replace_faces_with_emoji(image, emoji_path)
-
-    # Save the resulting image to a BytesIO object
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
     img_bytes.seek(0)
-
-    file = discord.File(img_bytes, filename="emoji_faces.png")
-    await ctx.send(
-        f"Here is your image with the `{emoji_name}` emoji faces:", file=file
-    )
+    file = File(img_bytes, filename="emoji_faces.png")
+    await ctx.send(f"Image with `{emoji_name}` emoji faces:", file=file)
 
 
 @bot.command()
-# Adds captions to an image from a referenced message or attachment
 async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     image_url = None
     if ctx.message.attachments:
         image_url = ctx.message.attachments[0].url
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image_url = ref_msg.attachments[0].url
-        else:
-            urls = [
-                word
-                for word in ref_msg.content.split()
-                if word.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))
-            ]
-            if urls:
-                image_url = urls[0]
+        image_url = (
+            ref_msg.attachments[0].url
+            if ref_msg.attachments
+            else next(
+                (
+                    word
+                    for word in ref_msg.content.split()
+                    if word.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))
+                ),
+                None,
+            )
+        )
     if not image_url:
-        await ctx.send("Please attach an image or reply to one!", delete_after=4)
+        await ctx.send("Please attach or reply to an image!", delete_after=4)
         return
-
     async with aiohttp.ClientSession() as session:
         async with session.get(image_url) as resp:
             if resp.status != 200:
                 await ctx.send("Failed to fetch image!", delete_after=4)
                 return
-            image_data = await resp.read()
-
-    image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+            image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    font_size = max(20, width // 10)  # Scale font size to 1/10th of image width, min 20
-    try:
-        font = ImageFont.truetype("comic.ttf", font_size)
-    except:
-        font = ImageFont.load_default(size=font_size)
-
+    font_size = max(20, width // 10)
+    font = (
+        ImageFont.truetype("comic.ttf", font_size)
+        if os.path.exists("comic.ttf")
+        else ImageFont.load_default(size=font_size)
+    )
     if top_text:
         top_text = top_text.upper()
         top_bbox = draw.textbbox((0, 0), top_text, font=font)
@@ -644,14 +537,11 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             stroke_width=2,
             stroke_fill="black",
         )
-
     if bottom_text:
         bottom_text = bottom_text.upper()
         bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
         bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
-        bottom_y = (
-            height - (bottom_bbox[3] - bottom_bbox[1]) - 20
-        )  # Added 10px buffer (total 20px from edge)
+        bottom_y = height - (bottom_bbox[3] - bottom_bbox[1]) - 20
         draw.text(
             (bottom_x, bottom_y),
             bottom_text,
@@ -660,13 +550,9 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             stroke_width=2,
             stroke_fill="black",
         )
-
     if not top_text and not bottom_text:
-        await ctx.send(
-            "Please provide at least one caption (top or bottom)!", delete_after=4
-        )
+        await ctx.send("Provide at least one caption!", delete_after=4)
         return
-
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
@@ -674,28 +560,20 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
 
 
 @bot.command()
-# Plays a sound effect in the user’s voice channel
 async def play(ctx, sound: str):
-    sound_files = {
-        "laugh": "laugh.mp3",
-        "clap": "clap.mp3",
-    }
+    sound_files = {"laugh": "laugh.mp3", "clap": "clap.mp3"}
     if sound not in sound_files:
         await ctx.send(
             f"Available sounds: {', '.join(sound_files.keys())}", delete_after=4
         )
         return
     if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("You need to be in a voice channel!", delete_after=4)
+        await ctx.send("Join a voice channel first!", delete_after=4)
         return
     if not discord.opus.is_loaded():
-        await ctx.send(
-            "Voice support is not available due to missing Opus library!",
-            delete_after=4,
-        )
+        await ctx.send("Voice support unavailable!", delete_after=4)
         return
-    voice_channel = ctx.author.voice.channel
-    vc = await voice_channel.connect()
+    vc = await ctx.author.voice.channel.connect()
     sound_path = os.path.join("sounds", sound_files[sound])
     if not os.path.exists(sound_path):
         await ctx.send("Sound file not found!", delete_after=4)
@@ -709,57 +587,44 @@ async def play(ctx, sound: str):
 
 # AI Feature Commands
 @bot.command()
-# Sets custom context for AI responses
 async def setcontext(ctx, *, new_context: str):
     user_id = ctx.author.id
     user_preferences[user_id] = new_context
-    logger.debug(f"Set context for user {user_id} to: {new_context}")
     await ctx.send(f"Context updated: {new_context}", delete_after=5)
 
 
 @bot.command()
-# Chats with QUARGLE AI using OpenAI
 async def QUARGLE(ctx, *, inputText: str):
     openai.api_key = OPENAI_GPT_TOKEN
     user_id = ctx.author.id
-    logger.debug(
-        f"Processing QUARGLE command for user {user_id} with input: {inputText}"
-    )
     sanitized_input = (
         profanity.censor(inputText)
         if profanity.contains_profanity(inputText)
         else inputText
     )
-    original_message = ""
-    original_author = ""
+    original_message = original_author = ""
     if ctx.message.reference:
-        try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            original_message = ref_msg.content
-            original_author = ref_msg.author.name
-        except Exception as e:
-            logger.error(f"Failed to fetch referenced message: {e}")
-    username = ctx.author.name
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        original_message, original_author = ref_msg.content, ref_msg.author.name
     context = user_preferences.get(user_id, "")
-    file_path = get_history_file(user_id)
     conversation_history = await load_conversation_history(user_id)
-    if not os.path.exists(file_path) or not conversation_history:
+    if not conversation_history:
         system_msg = {
             "role": "system",
-            "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
+            "content": f"{BOT_IDENTITY} Assisting {ctx.author.name}. {context}",
         }
         await write_system_message(user_id, system_msg["content"])
         conversation_history = [system_msg]
-    conversation_input = sanitized_input
-    if original_message:
-        conversation_input = (
-            f"{sanitized_input}\n\nReplying to {original_author}: '{original_message}'"
-        )
+    conversation_input = (
+        f"{sanitized_input}\n\nReplying to {original_author}: '{original_message}'"
+        if original_message
+        else sanitized_input
+    )
     await append_to_conversation_history(user_id, "user", conversation_input)
     conversation_history.append({"role": "user", "content": conversation_input})
     system_msg = {
         "role": "system",
-        "content": f"{BOT_IDENTITY} Assisting {username}. {context}",
+        "content": f"{BOT_IDENTITY} Assisting {ctx.author.name}. {context}",
     }
     api_history = [system_msg] + conversation_history[-20:]
     thinking_message = await ctx.send("Thinking...")
@@ -767,8 +632,7 @@ async def QUARGLE(ctx, *, inputText: str):
         response = await bot.loop.run_in_executor(
             None,
             lambda: openai.chat.completions.create(
-                model="gpt-4o",
-                messages=api_history,
+                model="gpt-4o", messages=api_history
             ),
         )
         bot_response = response.choices[0].message.content
@@ -777,7 +641,7 @@ async def QUARGLE(ctx, *, inputText: str):
         await ctx.send(bot_response)
     except Exception as e:
         logger.error(f"QUARGLE error: {e}")
-        await ctx.send("An error occurred with the AI.", delete_after=10)
+        await ctx.send("AI error occurred.", delete_after=10)
     finally:
         try:
             await thinking_message.delete()
@@ -786,9 +650,8 @@ async def QUARGLE(ctx, *, inputText: str):
 
 
 @bot.command()
-# Generates an image using DALL-E 3
 async def imagine(ctx, *, inputText: str):
-    loading_msg = await ctx.send("Processing...", delete_after=1)
+    await ctx.send("Processing...", delete_after=1)
     try:
         response = await bot.loop.run_in_executor(
             None,
@@ -803,17 +666,15 @@ async def imagine(ctx, *, inputText: str):
         embed = Embed(title=inputText, url=response.data[0].url)
         embed.set_image(url=response.data[0].url)
         await ctx.send(embed=embed)
-        logger.info(f"Generated image for '{inputText}': {response.data[0].url}")
     except Exception as e:
         logger.error(f"Imagine error: {e}")
         await ctx.send("Failed to generate image.", delete_after=2)
 
 
 @bot.command()
-# Analyzes sentiment of a referenced message
 async def sentiment(ctx):
     if not ctx.message.reference:
-        await ctx.send("Please reply to a message to analyze!", delete_after=4)
+        await ctx.send("Reply to a message to analyze!", delete_after=4)
         return
     ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
     openai.api_key = OPENAI_GPT_TOKEN
@@ -822,8 +683,7 @@ async def sentiment(ctx):
         response = await bot.loop.run_in_executor(
             None,
             lambda: openai.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
+                model="gpt-4o", messages=[{"role": "user", "content": prompt}]
             ),
         )
         sentiment = response.choices[0].message.content
@@ -843,89 +703,65 @@ async def sentiment(ctx):
 
 # Admin Commands
 @bot.command()
-# Shuts down bot for updates
 async def update(ctx):
-    await ctx.send("Bot is prepping for updates...", delete_after=1)
+    await ctx.send("Prepping for updates...", delete_after=1)
     await asyncio.sleep(2)
     await bot.close()
 
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-# Clears all conversation history files
 async def clearhistory(ctx):
-    logger.info(
-        f"Clearhistory command invoked by {ctx.author.name} (ID: {ctx.author.id})"
-    )
     history_dir = HISTORY_DIR
     if not os.path.exists(history_dir):
-        await ctx.send("No conversation history directory found!", delete_after=5)
-        logger.warning(f"Directory {history_dir} does not exist")
+        await ctx.send("No history directory found!", delete_after=5)
         return
     files_deleted = 0
-    try:
-        for filename in os.listdir(history_dir):
-            file_path = os.path.join(history_dir, filename)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                files_deleted += 1
-                logger.debug(f"Deleted file: {file_path}")
-        if files_deleted > 0:
-            await ctx.send(
-                f"Cleared {files_deleted} conversation history file(s)!", delete_after=5
-            )
-            logger.info(
-                f"Successfully deleted {files_deleted} files from {history_dir}"
-            )
-        else:
-            await ctx.send("No conversation history files to clear!", delete_after=5)
-            logger.info(f"No files found in {history_dir} to delete")
-    except Exception as e:
-        logger.error(f"Error clearing history: {e}")
-        await ctx.send(
-            "An error occurred while clearing the conversation history.", delete_after=5
-        )
+    for filename in os.listdir(history_dir):
+        file_path = os.path.join(history_dir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            files_deleted += 1
+    await ctx.send(
+        (
+            f"Cleared {files_deleted} history file(s)!"
+            if files_deleted
+            else "No history files to clear!"
+        ),
+        delete_after=5,
+    )
 
 
 @clearhistory.error
-# Handles permission errors for clearhistory command
 async def clearhistory_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send(
-            "You need Administrator permissions to use this command!", delete_after=5
-        )
-        logger.warning(
-            f"{ctx.author.name} (ID: {ctx.author.id}) attempted clearhistory without admin perms"
-        )
+        await ctx.send("You need Administrator permissions!", delete_after=5)
 
 
 # Message Management Commands
 @bot.command()
-# Saves a referenced message to a JSON file
 async def savemessage(ctx):
     if not ctx.message.reference:
-        await ctx.send("Please reply to a message to save it!", delete_after=5)
+        await ctx.send("Reply to a message to save it!", delete_after=5)
         return
     ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-    user_id = ref_msg.author.id
-    username = ref_msg.author.name
-    content = ref_msg.content
-    timestamp = ref_msg.created_at.isoformat()
+    user_id, content, timestamp = (
+        ref_msg.author.id,
+        ref_msg.content,
+        ref_msg.created_at.isoformat(),
+    )
     file_path = get_saved_messages_file(user_id)
-    messages = []
-    if os.path.exists(file_path):
-        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-            try:
-                messages = json.loads(await f.read())
-            except json.JSONDecodeError:
-                logger.error(f"Corrupted JSON file for user {user_id}, resetting.")
-                messages = []
+    messages = (
+        json.loads(await (await aiofiles.open(file_path, "r", encoding="utf-8")).read())
+        if os.path.exists(file_path)
+        else []
+    )
     messages.append({"content": content, "timestamp": timestamp})
     if len(messages) > 20:
         messages = messages[-20:]
     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
         await f.write(json.dumps(messages, indent=2))
-    await ctx.send(f"Saved message from {username}!", delete_after=5)
+    await ctx.send(f"Saved message from {ref_msg.author.name}!", delete_after=5)
     await ctx.message.delete(delay=1)
 
 
@@ -944,7 +780,7 @@ class MessageSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.view.ctx.author:
             await interaction.response.send_message(
-                "This isn’t your selection!", ephemeral=True
+                "Not your selection!", ephemeral=True
             )
             return
         selected_idx = int(self.values[0])
@@ -967,22 +803,16 @@ class MessageView(ui.View):
 
 
 @bot.command()
-# Lists or retrieves saved messages for a user with pagination
 async def mentionmessage(ctx, member: Member, page: int = 1):
-    user_id = member.id
-    file_path = get_saved_messages_file(user_id)
+    file_path = get_saved_messages_file(member.id)
     if not os.path.exists(file_path):
-        await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
+        await ctx.send(f"No saved messages for {member.name}!", delete_after=5)
         return
-    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-        try:
-            messages = json.loads(await f.read())
-        except json.JSONDecodeError:
-            logger.error(f"Corrupted JSON file for user {user_id}.")
-            await ctx.send("Error reading saved messages!", delete_after=5)
-            return
+    messages = json.loads(
+        await (await aiofiles.open(file_path, "r", encoding="utf-8")).read()
+    )
     if not messages:
-        await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
+        await ctx.send(f"No saved messages for {member.name}!", delete_after=5)
         return
     ITEMS_PER_PAGE = 5
     total_pages = (len(messages) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
@@ -994,7 +824,7 @@ async def mentionmessage(ctx, member: Member, page: int = 1):
     embed = Embed(
         title=f"Saved Messages for {member.name} (Page {page}/{total_pages})",
         color=discord.Color.gold(),
-        description="Select a message below or use `.mentionmessage @user <page>`",
+        description="Select below or use `.mentionmessage @user <page>`",
     )
     for i, msg in enumerate(messages[start:end], start + 1):
         preview = msg["content"][:50] + ("..." if len(msg["content"]) > 50 else "")
@@ -1018,23 +848,27 @@ COMMAND_CATEGORIES = {
         "meme": "Posts a random Reddit meme",
         "reaction": "Replies with a GIF to a referenced message",
         "ourmeme": "Shares a random local meme (image/video)",
-        "upload": "Uploads attachments to OurMemes or Saves (e.g., .upload Saves)",
-        "caption": "Adds top and bottom text to an image",
-        "play": "Plays a sound effect in your voice channel",
+        "upload": "Uploads attachments to OurMemes or Saves",
+        "ascii": "Converts image to detailed ASCII art",
+        "asciisimple": "Converts image to simple ASCII art",
+        "pixelate": "Pixelates an image (intensity 1-10)",
+        "emojiface": "Replaces faces in image with an emoji",
+        "caption": "Adds top/bottom text to an image",
+        "play": "Plays a sound effect in voice channel",
     },
     "AI Features": {
         "setcontext": "Sets custom context for AI responses",
         "QUARGLE": "Chats with QUARGLE AI",
         "imagine": "Generates an image with DALL-E 3",
-        "sentiment": "Analyzes the sentiment of a referenced message",
+        "sentiment": "Analyzes sentiment of a referenced message",
     },
     "Admin Tools": {
-        "clearhistory": "Clears all conversation history files (Admin required)",
+        "clearhistory": "Clears all conversation history (Admin required)",
         "update": "Shuts down bot for updates",
     },
     "Message Management": {
-        "savemessage": "Saves a replied-to message to a JSON file",
-        "mentionmessage": "Lists saved messages with pagination or retrieves one",
+        "savemessage": "Saves a replied-to message",
+        "mentionmessage": "Lists or retrieves saved messages",
     },
 }
 COLORS = {
@@ -1056,7 +890,7 @@ class HelpSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.view.ctx.author:
             await interaction.response.send_message(
-                "This isn’t your help menu!", ephemeral=True
+                "Not your help menu!", ephemeral=True
             )
             return
         cat = self.values[0]
@@ -1079,11 +913,10 @@ class HelpView(ui.View):
 
 
 @bot.command(name="help")
-# Displays an interactive help menu with select dropdown
 async def help_command(ctx):
     embed = Embed(
         title="QUARGLE-HELP",
-        description="Select a category below to view commands.",
+        description="Select a category below.",
         color=discord.Color.blue(),
     )
     embed.set_footer(text="Prefix: .")
