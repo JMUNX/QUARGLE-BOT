@@ -533,7 +533,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     width, height = image.size
 
     # Font setup with Comic Sans
-    font_path = "comic.ttf"  # Adjust to "ComicSansMS.ttf" if needed
+    font_path = "comicz.ttf"
     if not os.path.exists(font_path):
         await ctx.send(
             "Comic Sans font file not found! Using default font.", delete_after=4
