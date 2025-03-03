@@ -706,7 +706,6 @@ COMMAND_CATEGORIES = {
         "debug": "Sends a debug message",
     },
     "Memes & Fun": {
-        "freak": "Sends a freaky message to a channel",
         "meme": "Posts a random Reddit meme",
         "reaction": "Replies with a GIF to a referenced message",
         "ourmeme": "Shares a random local meme (image/video)",
