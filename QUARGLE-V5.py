@@ -17,11 +17,10 @@ from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from better_profanity import Profanity
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import io
 import cv2
 import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -62,6 +61,7 @@ os.makedirs(SAVES_FOLDER, exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
+last_bot_image = None  # Global to track bot's last posted image
 
 
 # Bot Lifecycle Events
@@ -178,7 +178,24 @@ async def save_attachment(item, session, directory):
                 await f.write(await resp.read())
 
 
-# Utilities Commands
+async def get_image_from_context(ctx):
+    """Helper function to retrieve an image from message context."""
+    if ctx.message.attachments:
+        return Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            return Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
+        elif (
+            ref_msg.author == bot.user
+            and "last_bot_image" in globals()
+            and last_bot_image
+        ):
+            return last_bot_image
+    return None
+
+
+# Utility Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
@@ -209,6 +226,7 @@ async def getpfp(ctx, member: Member = None):
     await ctx.send(embed=embed)
 
 
+# Meme & Media Commands
 @bot.command()
 async def meme(ctx):
     await ctx.message.delete(delay=1)
@@ -288,15 +306,41 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         return
     command_attachments = ctx.message.attachments
     ref_urls = []
+    ref_attachments = []
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         ref_urls = [
             word for word in ref_msg.content.split() if word.lower().endswith(".gif")
         ]
-    all_items = command_attachments + [
-        type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
-        for url in ref_urls
-    ]
+        ref_attachments = ref_msg.attachments if ref_msg.author != bot.user else []
+        if (
+            ref_msg.author == bot.user
+            and "last_bot_image" in globals()
+            and last_bot_image
+        ):
+            img_bytes = io.BytesIO()
+            last_bot_image.save(img_bytes, format="PNG")
+            img_bytes.seek(0)
+            ref_attachments.append(
+                type(
+                    "obj",
+                    (),
+                    {
+                        "url": ref_msg.attachments[0].url,
+                        "filename": "bot_image.png",
+                        "read": lambda: img_bytes.getvalue(),
+                    },
+                )()
+            )
+
+    all_items = (
+        command_attachments
+        + ref_attachments
+        + [
+            type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
+            for url in ref_urls
+        ]
+    )
     if not all_items:
         await ctx.send("No attachments or GIF links found!", delete_after=4)
         return
@@ -330,7 +374,7 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
-# PIL Functions for Memes & Fun
+# Image Processing Commands
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
 
 
@@ -339,8 +383,9 @@ def image_to_ascii(image, width=50, dense=True):
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
     ascii_chars = ASCII_CHARS_DENSE
+    pixels = np.array(image)
     ascii_str = "".join(
-        ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in image.getdata()
+        ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in pixels.flatten()
     )
     return "\n".join(ascii_str[i : i + width] for i in range(0, len(ascii_str), width))
 
@@ -362,15 +407,30 @@ def replace_faces_with_emoji(image, emoji_path):
     return image
 
 
+def deepfry_image(image: Image, intensity: int) -> Image:
+    """Optimized deepfry function using NumPy for faster pixel manipulation."""
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(
+        1 + (intensity / 5)
+    )  # Reduced max contrast for performance
+
+    # Convert to NumPy array for vectorized operations
+    img_array = np.array(image)
+    noise = np.random.randint(
+        -intensity * 5, intensity * 5 + 1, img_array.shape, dtype=np.int16
+    )
+    img_array = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+
+    image = Image.fromarray(img_array)
+    image = image.filter(
+        ImageFilter.GaussianBlur(radius=intensity / 5)
+    )  # Reduced blur radius
+    return image
+
+
 @bot.command()
 async def ascii(ctx):
-    image = None
-    if ctx.message.attachments:
-        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    elif ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
+    image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
@@ -384,13 +444,7 @@ async def pixelate(ctx, intensity: int = 5):
     if intensity < 1 or intensity > 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
-    image = None
-    if ctx.message.attachments:
-        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    elif ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
+    image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
@@ -413,195 +467,53 @@ async def deepfry(ctx, intensity: int = 5):
     if intensity < 1 or intensity > 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
-
-    image = None
-    # Check if the message has an attachment (user uploaded an image)
-    if ctx.message.attachments:
-        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    # If it's a reply to another message with an image attachment
-    elif ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
-
-    # If no image was found, notify the user
+    image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
-
-    # Apply the deepfry effect (adjust contrast, noise, blur, and distortion)
     image = deepfry_image(image, intensity)
-
-    # Save the deepfried image in a BytesIO object
     img_bytes = io.BytesIO()
     image.save(img_bytes, format="PNG")
     img_bytes.seek(0)
     file = File(img_bytes, filename="deepfried.png")
-
     await ctx.send(f"Deepfried image (Intensity {intensity}):", file=file)
-
-
-def deepfry_image(image: Image, intensity: int) -> Image:
-    # Increase contrast to intensify the fried effect
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2 + (intensity / 5))  # Higher intensity = more contrast
-
-    # Add random noise or distortion to the image for more chaotic effect
-    width, height = image.size
-    pixels = image.load()
-
-    # Check if the image is in RGBA (if it has an alpha channel)
-    if image.mode == "RGBA":
-        for i in range(width):
-            for j in range(height):
-                r, g, b, a = pixels[i, j]
-                # Add random noise to RGB values
-                r = min(
-                    255, max(0, r + random.randint(-intensity * 10, intensity * 10))
-                )
-                g = min(
-                    255, max(0, g + random.randint(-intensity * 10, intensity * 10))
-                )
-                b = min(
-                    255, max(0, b + random.randint(-intensity * 10, intensity * 10))
-                )
-                pixels[i, j] = (r, g, b, a)
-    elif image.mode == "RGB":
-        for i in range(width):
-            for j in range(height):
-                r, g, b = pixels[i, j]
-                # Add random noise to RGB values
-                r = min(
-                    255, max(0, r + random.randint(-intensity * 10, intensity * 10))
-                )
-                g = min(
-                    255, max(0, g + random.randint(-intensity * 10, intensity * 10))
-                )
-                b = min(
-                    255, max(0, b + random.randint(-intensity * 10, intensity * 10))
-                )
-                pixels[i, j] = (r, g, b)
-    elif image.mode == "L":  # Grayscale image
-        for i in range(width):
-            for j in range(height):
-                pixel = pixels[i, j]
-                # Add random noise to the grayscale value
-                pixel = min(
-                    255, max(0, pixel + random.randint(-intensity * 10, intensity * 10))
-                )
-                pixels[i, j] = pixel
-
-    # Apply a subtle blur to make the effect even more chaotic
-    image = image.filter(ImageFilter.GaussianBlur(radius=intensity / 3))
-
-    return image
-
-
-@bot.event
-async def on_message(message):
-    global last_bot_image
-
-    # Only track messages from the bot (to store its images)
-    if message.author == bot.user and message.attachments:
-        # Save the last image sent by the bot
-        last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
-
-    await bot.process_commands(message)
-
-
-@bot.event
-async def on_message(message):
-    global last_bot_image
-
-    # If the bot sends an image, store it for future deepfrying
-    if message.author == bot.user and message.attachments:
-        last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
-
-    await bot.process_commands(message)
 
 
 @bot.command()
 async def emojify(ctx, emoji_name: str = None):
     if not emoji_name:
-        # List all files with valid image extensions in EMOJI_FOLDER
         valid_extensions = (".png", ".jpg", ".jpeg", ".gif")
         emoji_files = [
-            f[: f.rfind(".")]  # Strip extension
+            f[: f.rfind(".")]
             for f in os.listdir(EMOJI_FOLDER)
-            if os.path.isfile(os.path.join(EMOJI_FOLDER, f))
-            and f.lower().endswith(valid_extensions)
+            if f.lower().endswith(valid_extensions)
         ]
         if not emoji_files:
-            await ctx.send(
-                f"No emojis found in the `/{EMOJI_FOLDER}/` folder.", delete_after=10
-            )
+            await ctx.send(f"No emojis found in `/{EMOJI_FOLDER}/`.", delete_after=10)
             return
-
-        # Map emoji names to Unicode placeholders (customize as needed)
         emoji_previews = {
             "freak": "<:freak:1345942275175219221>",
             "death": "<:death:1345942262860873740>",
             "creep": "<:creep:1345942246851215410>",
             "chad": "<:chad:1345942227800817755>",
-            # Add more mappings or use a default emoji for unmapped names
         }
-        default_preview = "🙂"  # Fallback for unmapped emojis
-
-        # Build the description with names and emoji previews
+        default_preview = "🙂"
         description = "Use `.emojify <emoji_name>` with one of these:\n\n"
         for emoji in emoji_files:
             preview = emoji_previews.get(emoji.lower(), default_preview)
             description += f"- {preview} `{emoji}`\n"
-
         embed = Embed(
             title="Available Emojis",
-            description=description,
+            description=description[:1024],
             color=discord.Color.blue(),
         )
-
-        # Check embed size (Discord limit: 6000 total characters, 1024 per description)
-        if len(description) > 1024:
-            # Split into multiple embeds if too long
-            lines = description.split("\n")
-            current_desc = "Use `.emojify <emoji_name>` with one of these:\n\n"
-            embeds = []
-            for line in lines[2:]:  # Skip initial header lines
-                if len(current_desc) + len(line) + 1 > 1024:
-                    embeds.append(
-                        Embed(
-                            title="Available Emojis (Continued)",
-                            description=current_desc,
-                            color=discord.Color.blue(),
-                        )
-                    )
-                    current_desc = "Use `.emojify <emoji_name>` with one of these:\n\n"
-                current_desc += line + "\n"
-            if current_desc.strip():
-                embeds.append(
-                    Embed(
-                        title="Available Emojis (Continued)",
-                        description=current_desc,
-                        color=discord.Color.blue(),
-                    )
-                )
-            embeds[0].title = "Available Emojis"  # First embed keeps original title
-            for embed in embeds:
-                await ctx.send(embed=embed, delete_after=30)
-        else:
-            await ctx.send(embed=embed, delete_after=30)
+        await ctx.send(embed=embed, delete_after=30)
         return
-
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
     if not os.path.exists(emoji_path):
         await ctx.send(f"Emoji `{emoji_name}` not found in `/{EMOJI_FOLDER}/`.")
         return
-    image = None
-    if ctx.message.attachments:
-        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    elif ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
+    image = await get_image_from_context(ctx)
     if image is None:
         await ctx.send("Please upload or reply to an image.")
         return
@@ -641,22 +553,13 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 await ctx.send("Failed to fetch image!", delete_after=4)
                 return
             image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
-
     draw = ImageDraw.Draw(image)
     width, height = image.size
-
-    # Font setup with Comic Sans
-    font_path = "comicz.ttf"  # Adjust to "ComicSansMS.ttf" if needed
-    if not os.path.exists(font_path):
-        await ctx.send(
-            "Comic Sans font file not found! Using default font.", delete_after=4
-        )
-        font_path = None
+    font_path = "comicz.ttf"
     base_font_size = width // 15
     padding = 30
 
     def wrap_text(text, font, max_width):
-        """Wrap text into lines."""
         words = text.split()
         lines = []
         current_line = []
@@ -668,18 +571,17 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             else:
                 if current_line:
                     lines.append(" ".join(current_line))
-                lines.append(word)  # Single words go on their own line
+                lines.append(word)
                 current_line = []
         if current_line:
             lines.append(" ".join(current_line))
         return lines
 
     def fit_text(text, max_width, max_height, base_size):
-        """Fit text within height constraint."""
         font_size = base_size
         font = (
             ImageFont.truetype(font_path, font_size)
-            if font_path
+            if os.path.exists(font_path)
             else ImageFont.load_default(size=font_size)
         )
         lines = wrap_text(text, font, max_width)
@@ -692,7 +594,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
             font_size -= 2
             font = (
                 ImageFont.truetype(font_path, font_size)
-                if font_path
+                if os.path.exists(font_path)
                 else ImageFont.load_default(size=font_size)
             )
             lines = wrap_text(text, font, max_width)
@@ -704,7 +606,6 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         return font, lines, line_height
 
     region_height = height // 3 - padding
-
     if top_text:
         top_text = top_text.upper()
         font, top_lines, line_height = fit_text(
@@ -723,7 +624,6 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 stroke_fill="black",
             )
             y_offset += line_height + 5
-
     if bottom_text:
         bottom_text = bottom_text.upper()
         font, bottom_lines, line_height = fit_text(
@@ -743,17 +643,16 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 stroke_fill="black",
             )
             y_offset += line_height + 5
-
     if not top_text and not bottom_text:
         await ctx.send("Provide at least one caption!", delete_after=4)
         return
-
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
     await ctx.send(file=File(buffer, "captioned.png"))
 
 
+# Voice Commands
 @bot.command()
 async def play(ctx, sound: str):
     sound_files = {"laugh": "laugh.mp3", "clap": "clap.mp3"}
@@ -902,6 +801,15 @@ async def clearhistory_error(ctx, error):
         await ctx.send("You need Administrator permissions!", delete_after=5)
 
 
+# Event Handlers
+@bot.event
+async def on_message(message):
+    global last_bot_image
+    if message.author == bot.user and message.attachments:
+        last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+    await bot.process_commands(message)
+
+
 # Help Menu
 COMMAND_CATEGORIES = {
     "Utilities": {
@@ -909,15 +817,20 @@ COMMAND_CATEGORIES = {
         "getpfp": "Shows a user’s avatar (defaults to caller)",
         "debug": "Sends a debug message",
     },
-    "Memes & Fun": {
+    "Meme & Media": {
         "meme": "Posts a random Reddit meme",
         "reaction": "Replies with a GIF to a referenced message",
         "ourmeme": "Shares a random local meme (image/video)",
-        "upload": "Uploads attachments to ourMemes, Saves or emojis",
+        "upload": "Uploads attachments or bot images to specified folder",
+    },
+    "Image Processing": {
         "ascii": "Converts image to detailed ASCII art",
         "pixelate": "Pixelates an image (intensity 1-10)",
+        "deepfry": "Deepfries an image (intensity 1-10)",
         "emojify": "Replaces faces in image with an emoji",
         "caption": "Adds top/bottom text to an image",
+    },
+    "Voice": {
         "play": "Plays a sound effect in voice channel",
     },
     "AI Features": {
@@ -932,10 +845,11 @@ COMMAND_CATEGORIES = {
 }
 COLORS = {
     "Utilities": discord.Color.blue(),
-    "Memes & Fun": discord.Color.green(),
+    "Meme & Media": discord.Color.green(),
+    "Image Processing": discord.Color.orange(),
+    "Voice": discord.Color.gold(),
     "AI Features": discord.Color.purple(),
     "Admin Tools": discord.Color.red(),
-    "Message Management": discord.Color.orange(),
 }
 
 
