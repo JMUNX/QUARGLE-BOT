@@ -418,7 +418,7 @@ async def deepfry(ctx, intensity: int = 5):
     # Check if the message has an attachment
     if ctx.message.attachments:
         image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    # If it's a reply to another message with an image attachment
+    # If it's a reply to another message with an image attachment (including the bot's own images)
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
@@ -429,7 +429,7 @@ async def deepfry(ctx, intensity: int = 5):
         await ctx.send("Please upload or reply to an image.")
         return
 
-    # Apply the deepfry effect (adjust contrast, noise, blur)
+    # Apply the deepfry effect (adjust contrast, noise, blur, and distortion)
     image = deepfry_image(image, intensity)
 
     # Save the deepfried image in a BytesIO object
@@ -446,7 +446,7 @@ def deepfry_image(image: Image, intensity: int) -> Image:
     enhancer = ImageEnhance.Contrast(image)
     image = enhancer.enhance(2 + (intensity / 5))  # Higher intensity = more contrast
 
-    # Add random noise to the image for more distortion
+    # Add random noise or distortion to the image for more chaotic effect
     width, height = image.size
     pixels = image.load()
 
@@ -454,9 +454,9 @@ def deepfry_image(image: Image, intensity: int) -> Image:
         for j in range(height):
             r, g, b = pixels[i, j]
             # Add random noise to RGB values
-            r = min(255, max(0, r + random.randint(-intensity, intensity)))
-            g = min(255, max(0, g + random.randint(-intensity, intensity)))
-            b = min(255, max(0, b + random.randint(-intensity, intensity)))
+            r = min(255, max(0, r + random.randint(-intensity * 10, intensity * 10)))
+            g = min(255, max(0, g + random.randint(-intensity * 10, intensity * 10)))
+            b = min(255, max(0, b + random.randint(-intensity * 10, intensity * 10)))
             pixels[i, j] = (r, g, b)
 
     # Apply a subtle blur to make the effect even more chaotic
