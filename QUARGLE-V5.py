@@ -25,7 +25,7 @@ from typing import Optional, Dict
 
 # Bot Configuration and Setup
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Adjusted to reduce debug noise
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -62,7 +62,7 @@ os.makedirs(SAVES_FOLDER, exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
-bot_images: Dict[int, Image.Image] = {}  # Map message IDs to bot images
+bot_images: Dict[int, Image.Image] = {}
 
 
 # Bot Lifecycle Events
@@ -94,8 +94,7 @@ async def on_ready():
 async def setup_hook():
     bot.http_session = aiohttp.ClientSession()
     bot.executor = executor
-    bot.sources = await preload_sources()
-    bot.memeSources = bot.sources["memeSources"]
+    bot.memeSources = await load_file("memeSources.txt")
 
 
 async def close():
@@ -111,14 +110,11 @@ bot.on_close = close
 async def load_file(filename: str) -> list:
     try:
         async with aiofiles.open(filename, "r", encoding="utf-8") as file:
-            return [line.strip() async for line in file if line.strip()]
+            content = await file.read()
+            return [line.strip() for line in content.splitlines() if line.strip()]
     except FileNotFoundError:
         logger.error(f"File not found: {filename}")
         return []
-
-
-async def preload_sources() -> dict:
-    return {"memeSources": await load_file("memeSources.txt")}
 
 
 def get_history_file(user_id: int) -> str:
@@ -134,7 +130,7 @@ async def load_conversation_history(user_id: int) -> list:
     if not os.path.exists(file_path):
         return []
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-        lines = [line async for line in f]
+        lines = await f.readlines()
     return [json.loads(line) for line in lines[-20:] if line.strip()]
 
 
@@ -172,8 +168,6 @@ async def cleanup_messages(command_msg, preview_msg) -> None:
 async def save_attachment(attachment, session, directory):
     filename = attachment.filename
     file_path = os.path.join(directory, filename)
-
-    # Download the attachment
     async with session.get(attachment.url) as response:
         with open(file_path, "wb") as f:
             f.write(await response.read())
@@ -302,7 +296,6 @@ async def reaction(ctx):
 
 
 @bot.command()
-# Uploads attachments or GIF URLs to the specified directory
 async def upload(ctx, directory="OurMemes"):
     valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
@@ -310,25 +303,16 @@ async def upload(ctx, directory="OurMemes"):
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
         )
         return
-
     command_attachments = ctx.message.attachments
     ref_urls = []
     ref_attachments = []
-
-    # Check if there is a referenced message
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-
-        # Collect GIF URLs if there are any in the referenced message
         ref_urls = [
             word for word in ref_msg.content.split() if word.lower().endswith(".gif")
         ]
-
-        # Collect attachments if any from the referenced message (including bot's and user's)
         if ref_msg.attachments:
             ref_attachments = ref_msg.attachments
-
-    # Combine command attachments, referenced attachments, and URLs
     all_items = (
         command_attachments
         + ref_attachments
@@ -337,20 +321,13 @@ async def upload(ctx, directory="OurMemes"):
             for url in ref_urls
         ]
     )
-
     if not all_items:
         await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
-
-    # Track how many items are being uploaded
     num_files = len(all_items)
-
-    # Download the attachments and GIFs
     async with aiohttp.ClientSession() as session:
         tasks = [save_attachment(item, session, directory) for item in all_items]
         await asyncio.gather(*tasks)
-
-    # Respond with the number of files uploaded
     if num_files == 1:
         await ctx.send(f"1 file uploaded to {directory}", delete_after=10)
     else:
@@ -741,6 +718,7 @@ async def QUARGLE(ctx, *, inputText: str):
 
 @bot.command()
 async def imagine(ctx, *, inputText: str):
+    openai.api_key = OPENAI_GPT_TOKEN
     await ctx.send("Processing...", delete_after=1)
     try:
         response = await bot.loop.run_in_executor(
@@ -808,7 +786,6 @@ async def on_message(message):
             logger.debug(
                 f"Stored bot image from message {message.id}: {message.attachments[0].filename}"
             )
-            # Optional: Clean up old images to manage memory
             if len(bot_images) > 10:
                 oldest_id = min(bot_images.keys())
                 del bot_images[oldest_id]
