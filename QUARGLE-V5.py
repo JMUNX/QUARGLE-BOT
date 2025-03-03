@@ -528,42 +528,116 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 await ctx.send("Failed to fetch image!", delete_after=4)
                 return
             image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
+
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    font_size = max(20, width // 10)
-    font = (
-        ImageFont.truetype("comic.ttf", font_size)
-        if os.path.exists("comic.ttf")
-        else ImageFont.load_default(size=font_size)
-    )
+
+    # Font setup with dynamic scaling
+    base_font_size = width // 10  # Starting point based on image width
+    font_path = "comic.ttf" if os.path.exists("comic.ttf") else None
+    max_width = width * 0.9  # Allow 90% of image width for text
+
+    def wrap_text(text, font, max_width):
+        """Wrap text into multiple lines to fit within max_width."""
+        words = text.split()
+        lines = []
+        current_line = []
+        for word in words:
+            test_line = " ".join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                current_line.append(word)
+            else:
+                lines.append(" ".join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(" ".join(current_line))
+        return lines
+
+    def get_font_size(text, max_width, max_height, base_size):
+        """Dynamically adjust font size to fit text within bounds."""
+        font_size = base_size
+        while font_size > 10:  # Minimum font size
+            font = (
+                ImageFont.truetype(font_path, font_size)
+                if font_path
+                else ImageFont.load_default(size=font_size)
+            )
+            lines = wrap_text(text, font, max_width)
+            total_height = sum(
+                draw.textbbox((0, 0), line, font=font)[3]
+                - draw.textbbox((0, 0), line, font=font)[1]
+                for line in lines
+            )
+            total_width = max(
+                draw.textbbox((0, 0), line, font=font)[2]
+                - draw.textbbox((0, 0), line, font=font)[0]
+                for line in lines
+            )
+            if total_width <= max_width and total_height <= max_height:
+                return font, lines
+            font_size -= 2  # Reduce size incrementally
+        # Fallback to smallest size if it still doesn’t fit
+        font = (
+            ImageFont.truetype(font_path, 10)
+            if font_path
+            else ImageFont.load_default(size=10)
+        )
+        return font, wrap_text(text, font, max_width)
+
     if top_text:
         top_text = top_text.upper()
-        top_bbox = draw.textbbox((0, 0), top_text, font=font)
-        top_x = (width - (top_bbox[2] - top_bbox[0])) // 2
-        draw.text(
-            (top_x, 10),
-            top_text,
-            font=font,
-            fill="white",
-            stroke_width=2,
-            stroke_fill="black",
+        font, top_lines = get_font_size(
+            top_text, max_width, height // 3, base_font_size
+        )  # Limit to top third
+        line_height = (
+            draw.textbbox((0, 0), top_lines[0], font=font)[3]
+            - draw.textbbox((0, 0), top_lines[0], font=font)[1]
         )
+        y_offset = 10  # Starting padding
+        for line in top_lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            x = (width - (bbox[2] - bbox[0])) // 2
+            draw.text(
+                (x, y_offset),
+                line,
+                font=font,
+                fill="white",
+                stroke_width=2,
+                stroke_fill="black",
+            )
+            y_offset += line_height + 5  # Add spacing between lines
+
     if bottom_text:
         bottom_text = bottom_text.upper()
-        bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
-        bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
-        bottom_y = height - (bottom_bbox[3] - bottom_bbox[1]) - 20
-        draw.text(
-            (bottom_x, bottom_y),
-            bottom_text,
-            font=font,
-            fill="white",
-            stroke_width=2,
-            stroke_fill="black",
+        font, bottom_lines = get_font_size(
+            bottom_text, max_width, height // 3, base_font_size
+        )  # Limit to bottom third
+        line_height = (
+            draw.textbbox((0, 0), bottom_lines[0], font=font)[3]
+            - draw.textbbox((0, 0), bottom_lines[0], font=font)[1]
         )
+        total_height = (
+            len(bottom_lines) * (line_height + 5) - 5
+        )  # Total height of text block
+        y_offset = height - total_height - 20  # Start from bottom with padding
+        for line in bottom_lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            x = (width - (bbox[2] - bbox[0])) // 2
+            draw.text(
+                (x, y_offset),
+                line,
+                font=font,
+                fill="white",
+                stroke_width=2,
+                stroke_fill="black",
+            )
+            y_offset += line_height + 5  # Add spacing between lines
+
     if not top_text and not bottom_text:
         await ctx.send("Provide at least one caption!", delete_after=4)
         return
+
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
