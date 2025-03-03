@@ -427,6 +427,7 @@ def image_to_ascii(image, width=100):
     return ascii_str
 
 
+@bot.command()
 async def ascii(ctx):
     image = None
     if ctx.message.attachments:
