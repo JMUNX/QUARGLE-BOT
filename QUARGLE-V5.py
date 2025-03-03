@@ -410,21 +410,60 @@ async def pixelate(ctx, intensity: int = 5):
 @bot.command()
 async def emojify(ctx, emoji_name: str = None):
     if not emoji_name:
+        # List all files with valid image extensions in EMOJI_FOLDER
+        valid_extensions = (".png", ".jpg", ".jpeg", ".gif")
         emoji_files = [
-            f[:-4] for f in os.listdir(EMOJI_FOLDER) if f.lower().endswith(".png")
+            f
+            for f in os.listdir(EMOJI_FOLDER)
+            if os.path.isfile(os.path.join(EMOJI_FOLDER, f))
+            and f.lower().endswith(valid_extensions)
         ]
         if not emoji_files:
             await ctx.send(
                 f"No emojis found in the `/{EMOJI_FOLDER}/` folder.", delete_after=10
             )
             return
+
+        # Prepare embed and attachments
         embed = Embed(
             title="Available Emojis",
             description="Use `.emojify <emoji_name>` with one of these:\n\n"
-            + "\n".join(f"- `{emoji}`" for emoji in emoji_files),
+            + "\n".join(f"- `{f[:f.rfind('.')]}`" for f in emoji_files),
             color=discord.Color.blue(),
         )
-        await ctx.send(embed=embed, delete_after=30)
+        attachments = []
+
+        # Attach up to 10 emoji images
+        for emoji_file in emoji_files[
+            :10
+        ]:  # Limit to 10 due to Discord's attachment cap
+            file_path = os.path.join(EMOJI_FOLDER, emoji_file)
+            # Resize image to a small thumbnail size (e.g., 64x64)
+            with Image.open(file_path) as img:
+                img.thumbnail((64, 64), Image.LANCZOS)  # Resize to thumbnail
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format="PNG")
+                img_bytes.seek(0)
+                attachments.append(File(img_bytes, filename=emoji_file))
+
+        # Send the embed with attachments
+        await ctx.send(embed=embed, files=attachments, delete_after=30)
+
+        # If more than 10 emojis, send additional messages
+        if len(emoji_files) > 10:
+            remaining_emojis = emoji_files[10:]
+            for i in range(0, len(remaining_emojis), 10):
+                batch = remaining_emojis[i : i + 10]
+                batch_attachments = []
+                for emoji_file in batch:
+                    file_path = os.path.join(EMOJI_FOLDER, emoji_file)
+                    with Image.open(file_path) as img:
+                        img.thumbnail((64, 64), Image.LANCZOS)
+                        img_bytes = io.BytesIO()
+                        img.save(img_bytes, format="PNG")
+                        img_bytes.seek(0)
+                        batch_attachments.append(File(img_bytes, filename=emoji_file))
+                await ctx.send(files=batch_attachments, delete_after=30)
         return
 
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
