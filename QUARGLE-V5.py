@@ -661,21 +661,22 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
 
 @bot.command()
 async def play(ctx, sound: str = None, volume: int = 50):
-    # Delete the user's command message after 2 seconds
     await ctx.message.delete(delay=2)
 
-    # Define the target voice channel ID
-    TARGET_CHANNEL_ID = 1313738797783056445
-
-    # Get the target voice channel
+    TARGET_CHANNEL_ID = 475512390536921088
     voice_channel = bot.get_channel(TARGET_CHANNEL_ID)
+
+    # Check if the channel exists and is a voice channel
+    if not voice_channel:
+        await ctx.send("Voice channel not found! Check the channel ID.", delete_after=4)
+        return
     if not isinstance(voice_channel, discord.VoiceChannel):
         await ctx.send("Target channel is not a voice channel!", delete_after=4)
         return
 
-    # If no sound is provided, list available sounds like emojify
+    # List available sounds if none specified
     if not sound:
-        valid_extensions = (".mp3", ".wav", ".ogg")  # Supported audio formats
+        valid_extensions = (".mp3", ".wav", ".ogg")
         sound_files = [
             f[: f.rfind(".")]
             for f in os.listdir(SOUNDS_DIR)
@@ -686,13 +687,12 @@ async def play(ctx, sound: str = None, volume: int = 50):
                 f"No sound files found in `/{SOUNDS_DIR}/`.", delete_after=10
             )
             return
-
         description = "Use `.play <sound> [volume]` with one of these:\n\n" + "\n".join(
             f"- `{sound}`" for sound in sound_files
         )
         embed = Embed(
             title="Available Sounds",
-            description=description[:1024],  # Limit to embed field size
+            description=description[:1024],
             color=discord.Color.blue(),
         )
         await ctx.send(embed=embed, delete_after=30)
@@ -703,15 +703,14 @@ async def play(ctx, sound: str = None, volume: int = 50):
         await ctx.send("Volume must be between 1 and 100.", delete_after=4)
         return
 
-    # Check if Opus is loaded
+    # Check Opus
     if not discord.opus.is_loaded():
-        await ctx.send("Voice support unavailable!", delete_after=4)
+        await ctx.send("Voice support unavailable! Opus not loaded.", delete_after=4)
         return
 
-    # Construct the sound file path
-    sound_path = os.path.join(SOUNDS_DIR, f"{sound}.mp3")  # Default to .mp3
+    # Construct sound path
+    sound_path = os.path.join(SOUNDS_DIR, f"{sound}.mp3")
     if not os.path.exists(sound_path):
-        # Check other formats if .mp3 doesn’t exist
         for ext in (".wav", ".ogg"):
             alt_path = os.path.join(SOUNDS_DIR, f"{sound}{ext}")
             if os.path.exists(alt_path):
@@ -723,30 +722,42 @@ async def play(ctx, sound: str = None, volume: int = 50):
             )
             return
 
-    # Connect to the target voice channel
+    # Attempt to connect to the voice channel
     try:
         vc = await voice_channel.connect()
-    except discord.ClientException:
-        await ctx.send("Already connected to a voice channel!", delete_after=4)
+    except discord.Forbidden:
+        await ctx.send(
+            "Bot lacks permission to join the voice channel!", delete_after=4
+        )
+        logger.error(f"Permission denied to join channel {TARGET_CHANNEL_ID}")
+        return
+    except discord.ClientException as e:
+        await ctx.send(
+            "Bot is already connected elsewhere or connection failed!", delete_after=4
+        )
+        logger.error(f"ClientException: {e}")
         return
     except Exception as e:
-        logger.error(f"Failed to connect to voice channel: {e}")
         await ctx.send("Failed to join voice channel!", delete_after=4)
+        logger.error(
+            f"Failed to connect to {TARGET_CHANNEL_ID}: {type(e).__name__} - {str(e)}"
+        )
         return
 
-    # Play the sound with volume control
-    audio_source = discord.FFmpegPCMAudio(sound_path)
-    volume_adjusted = discord.PCMVolumeTransformer(
-        audio_source, volume=volume / 100.0
-    )  # Convert percentage to 0.01-1.0
-    vc.play(volume_adjusted)
-
-    # Wait for the sound to finish playing
-    while vc.is_playing():
-        await asyncio.sleep(1)
-
-    # Disconnect from the voice channel
-    await vc.disconnect()
+    # Play the sound
+    try:
+        audio_source = discord.FFmpegPCMAudio(sound_path)
+        volume_adjusted = discord.PCMVolumeTransformer(
+            audio_source, volume=volume / 100.0
+        )
+        vc.play(volume_adjusted)
+        while vc.is_playing():
+            await asyncio.sleep(1)
+    except Exception as e:
+        logger.error(f"Error playing sound {sound}: {e}")
+        await ctx.send("Failed to play sound!", delete_after=4)
+    finally:
+        await vc.disconnect()
 
 
 # AI Feature Commands
