@@ -22,6 +22,7 @@ import io
 import cv2
 import numpy as np
 from typing import Optional, Dict
+import nacl
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -663,7 +664,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
 async def play(ctx, sound: str = None, volume: int = 50):
     await ctx.message.delete(delay=2)
 
-    TARGET_CHANNEL_ID = 475512390536921088
+    TARGET_CHANNEL_ID = 574410799557378048
     voice_channel = bot.get_channel(TARGET_CHANNEL_ID)
 
     # Check if the channel exists and is a voice channel
