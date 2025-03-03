@@ -332,12 +332,13 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             bot_image_to_upload = {
                 "image": bot_images[ref_msg.id],
                 "filename": (
-                    ref_msg.attachments[1].filename
+                    ref_msg.attachments[0].filename
                     if ref_msg.attachments
                     else f"bot_image_{ref_msg.id}.png"
                 ),
             }
             logger.debug(f"Bot image detected: {bot_image_to_upload['filename']}")
+            await ctx.send(f"Bot image detected: {bot_image_to_upload['filename']}")
         elif ref_msg.author == bot.user:
             logger.debug("Bot message referenced, but no image stored")
             await ctx.send("Bot message referenced, but no image stored")
