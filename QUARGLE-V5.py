@@ -310,71 +310,27 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
         return
 
     command_attachments = ctx.message.attachments
-    ref_urls = []
     ref_attachments = []
-    bot_image_to_upload = None
-
-    logger.debug(f"Command attachments: {len(command_attachments)}")
 
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        ref_urls = [
-            word
-            for word in ref_msg.content.split()
-            if word.lower().endswith((".gif", ".png", ".jpg", ".jpeg"))
-        ]
-        ref_attachments = ref_msg.attachments if ref_msg.author != bot.user else []
-        logger.debug(
-            f"Ref msg by {ref_msg.author}, attachments: {len(ref_msg.attachments)}, URLs: {ref_urls}"
-        )
+        # Only grab attachments from bot messages
+        if ref_msg.author == bot.user and ref_msg.attachments:
+            ref_attachments = ref_msg.attachments
+            logger.debug(f"Bot message referenced, attachments: {len(ref_attachments)}")
+            await ctx.send(
+                f"Bot message referenced with {len(ref_attachments)} attachment(s)"
+            )
 
-        if ref_msg.author == bot.user:
-            # Check if the referenced bot message has attachments
-            if ref_msg.attachments:
-                bot_image_to_upload = {
-                    "image": bot_images[ref_msg.id],
-                    "filename": ref_msg.attachments[0].filename,
-                }
-                logger.debug(f"Bot image detected: {bot_image_to_upload['filename']}")
-                await ctx.send(f"Bot image detected: {bot_image_to_upload['filename']}")
-            else:
-                logger.debug("Bot message referenced, but no image stored")
-                await ctx.send("Bot message referenced, but no image stored")
-
-    all_items = (
-        command_attachments
-        + ref_attachments
-        + [
-            type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
-            for url in ref_urls
-        ]
-    )
-    logger.debug(f"Regular items to upload: {len(all_items)}")
-
-    uploaded_count = 0
-    if all_items:
-        tasks = [
-            save_attachment(item, bot.http_session, directory) for item in all_items
-        ]
-        await asyncio.gather(*tasks)
-        uploaded_count += len(tasks)
-    if bot_image_to_upload:
-        await save_image_data(
-            bot_image_to_upload["image"], directory, bot_image_to_upload["filename"]
-        )
-        uploaded_count += 1
-
-    if uploaded_count == 0:
-        error_msg = (
-            "No attachments or valid links found!"
-            if not bot_image_to_upload
-            else "Bot image unavailable!"
-        )
-        logger.debug(error_msg)
-        await ctx.send(error_msg, delete_after=4)
-        return
-
-    await ctx.send(f"{uploaded_count} file(s) uploaded to {directory}", delete_after=10)
+    # Combine the attachments from the command and the referenced message
+    all_attachments = command_attachments + ref_attachments
+    if all_attachments:
+        for attachment in all_attachments:
+            # Now simply download the file
+            await save_attachment(attachment, bot.http_session, directory)
+            await ctx.send(f"Downloaded: {attachment.filename}", delete_after=5)
+    else:
+        await ctx.send("No attachments found!", delete_after=4)
 
 
 @bot.command()
