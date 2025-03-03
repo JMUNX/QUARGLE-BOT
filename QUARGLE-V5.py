@@ -81,7 +81,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.40"
+        version = "69.420.41"
         embed = Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -332,7 +332,7 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             bot_image_to_upload = {
                 "image": bot_images[ref_msg.id],
                 "filename": (
-                    ref_msg.attachments[0].filename
+                    ref_msg.attachments[1].filename
                     if ref_msg.attachments
                     else f"bot_image_{ref_msg.id}.png"
                 ),
@@ -340,6 +340,7 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
             logger.debug(f"Bot image detected: {bot_image_to_upload['filename']}")
         elif ref_msg.author == bot.user:
             logger.debug("Bot message referenced, but no image stored")
+            await ctx.send("Bot message referenced, but no image stored")
 
     all_items = (
         command_attachments
