@@ -207,46 +207,6 @@ async def getpfp(ctx, member: Member = None):
 
 
 @bot.command()
-async def weather(ctx, *, city=""):
-    if not city:
-        await ctx.send("City is missing", delete_after=1)
-        return
-    async with python_weather.Client(unit=python_weather.IMPERIAL) as wc:
-        try:
-            weather = await wc.get(city)
-            current_temp = weather.temperature
-            forecast_msg = [f"Current temperature in {city}: {current_temp}°F"]
-            forecast_msg.extend(
-                f"{daily.date.strftime('%m/%d')}: High: {daily.highest_temperature}°F, Low: {daily.lowest_temperature}°F, Sunset: {daily.sunset.strftime('%I:%M %p')}"
-                for daily in weather.daily_forecasts[:3]
-            )
-            await ctx.send("\n".join(forecast_msg))
-        except Exception as e:
-            logger.error(f"Weather fetch failed: {e}")
-            await ctx.send("Failed to fetch weather data.", delete_after=2)
-
-
-# Memes & Fun Commands
-@bot.command()
-async def freak(ctx):
-    await ctx.message.delete(delay=1)
-    target = (
-        ctx.message.reference
-        and (await ctx.channel.fetch_message(ctx.message.reference.message_id)).author
-    )
-    mention = target.mention if target else "nobody in particular"
-    channel = bot.get_channel(656690392049385484)
-    if channel:
-        embed = Embed(
-            title="😈freak mode activated😈",
-            description=f"Im gonna touch you, {mention}",
-            color=discord.Color.red(),
-        )
-        embed.set_image(url="https://c.tenor.com/-A4nRXhIdSEAAAAd/tenor.gif")
-        await channel.send(embed=embed, delete_after=45)
-
-
-@bot.command()
 async def meme(ctx):
     await ctx.message.delete(delay=1)
     embed = Embed()
@@ -738,109 +698,11 @@ async def clearhistory_error(ctx, error):
         await ctx.send("You need Administrator permissions!", delete_after=5)
 
 
-# Message Management Commands
-@bot.command()
-async def savemessage(ctx):
-    if not ctx.message.reference:
-        await ctx.send("Reply to a message to save it!", delete_after=5)
-        return
-    ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-    user_id, content, timestamp = (
-        ref_msg.author.id,
-        ref_msg.content,
-        ref_msg.created_at.isoformat(),
-    )
-    file_path = get_saved_messages_file(user_id)
-    messages = (
-        json.loads(await (await aiofiles.open(file_path, "r", encoding="utf-8")).read())
-        if os.path.exists(file_path)
-        else []
-    )
-    messages.append({"content": content, "timestamp": timestamp})
-    if len(messages) > 20:
-        messages = messages[-20:]
-    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-        await f.write(json.dumps(messages, indent=2))
-    await ctx.send(f"Saved message from {ref_msg.author.name}!", delete_after=5)
-    await ctx.message.delete(delay=1)
-
-
-class MessageSelect(ui.Select):
-    def __init__(self, messages, member):
-        self.messages = messages
-        self.member = member
-        options = [
-            SelectOption(
-                label=f"Message {i+1}", value=str(i), description=msg["content"][:50]
-            )
-            for i, msg in enumerate(messages[:25])
-        ]
-        super().__init__(placeholder="Select a message...", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user != self.view.ctx.author:
-            await interaction.response.send_message(
-                "Not your selection!", ephemeral=True
-            )
-            return
-        selected_idx = int(self.values[0])
-        msg = self.messages[selected_idx]
-        embed = Embed(
-            title=f"Message from {self.member.name}",
-            description=msg["content"],
-            color=discord.Color.gold(),
-        )
-        embed.set_footer(text=f"Saved on: {msg['timestamp']}")
-        await interaction.response.send_message(embed=embed)
-        self.view.stop()
-
-
-class MessageView(ui.View):
-    def __init__(self, ctx, messages, member):
-        super().__init__(timeout=30)
-        self.ctx = ctx
-        self.add_item(MessageSelect(messages, member))
-
-
-@bot.command()
-async def mentionmessage(ctx, member: Member, page: int = 1):
-    file_path = get_saved_messages_file(member.id)
-    if not os.path.exists(file_path):
-        await ctx.send(f"No saved messages for {member.name}!", delete_after=5)
-        return
-    messages = json.loads(
-        await (await aiofiles.open(file_path, "r", encoding="utf-8")).read()
-    )
-    if not messages:
-        await ctx.send(f"No saved messages for {member.name}!", delete_after=5)
-        return
-    ITEMS_PER_PAGE = 5
-    total_pages = (len(messages) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
-    if page < 1 or page > total_pages:
-        await ctx.send(f"Invalid page! Use 1 to {total_pages}.", delete_after=5)
-        return
-    start = (page - 1) * ITEMS_PER_PAGE
-    end = start + ITEMS_PER_PAGE
-    embed = Embed(
-        title=f"Saved Messages for {member.name} (Page {page}/{total_pages})",
-        color=discord.Color.gold(),
-        description="Select below or use `.mentionmessage @user <page>`",
-    )
-    for i, msg in enumerate(messages[start:end], start + 1):
-        preview = msg["content"][:50] + ("..." if len(msg["content"]) > 50 else "")
-        embed.add_field(name=f"{i}. {msg['timestamp']}", value=preview, inline=False)
-    view = MessageView(ctx, messages, member)
-    preview_msg = await ctx.send(embed=embed, view=view)
-    await view.wait()
-    await preview_msg.edit(view=None)
-
-
 # Help Menu
 COMMAND_CATEGORIES = {
     "Utilities": {
         "clear": "Clears up to 200 messages (Manage Messages required)",
         "getpfp": "Shows a user’s avatar (defaults to caller)",
-        "weather": "Shows 3-day forecast for a city",
         "debug": "Sends a debug message",
     },
     "Memes & Fun": {
@@ -865,10 +727,6 @@ COMMAND_CATEGORIES = {
     "Admin Tools": {
         "clearhistory": "Clears all conversation history (Admin required)",
         "update": "Shuts down bot for updates",
-    },
-    "Message Management": {
-        "savemessage": "Saves a replied-to message",
-        "mentionmessage": "Lists or retrieves saved messages",
     },
 }
 COLORS = {
