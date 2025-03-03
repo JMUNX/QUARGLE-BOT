@@ -53,9 +53,11 @@ BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this 
 HISTORY_DIR = "conversationHistory"
 SAVED_MESSAGES_DIR = "savedMessages"
 EMOJI_FOLDER = "emojisFolder"
+SAVES_FOLDER = "savesFolder"
+OURMEMES_FOLDER = "ourMemes"
 os.makedirs(HISTORY_DIR, exist_ok=True)
-os.makedirs("ourMemes", exist_ok=True)
-os.makedirs("Saves", exist_ok=True)
+os.makedirs(OURMEMES_FOLDER, exist_ok=True)
+os.makedirs(SAVES_FOLDER, exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
@@ -276,8 +278,8 @@ async def reaction(ctx):
 
 
 @bot.command()
-async def upload(ctx, directory="ourMemes"):
-    valid_dirs = ["ourMemes", "Saves", "Emojis"]
+async def upload(ctx, directory=OURMEMES_FOLDER):
+    valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
         await ctx.send(
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
@@ -310,11 +312,11 @@ async def ourmeme(ctx, media_type: str = None):
         media_type.lower() if media_type else None,
         valid_exts["image"] + valid_exts["video"],
     )
-    files = [f for f in os.listdir("ourMemes") if f.lower().endswith(exts)]
+    files = [f for f in os.listdir(OURMEMES_FOLDER) if f.lower().endswith(exts)]
     if not files:
         await ctx.send(f"No {media_type or 'memes'} found!", delete_after=2)
         return
-    file_path = os.path.join("ourMemes", random.choice(files))
+    file_path = os.path.join(OURMEMES_FOLDER, random.choice(files))
     titles = await load_file("Oldwordlist.txt")
     title = random.choice(titles) if titles else "Random Meme"
     file = File(file_path)
@@ -352,9 +354,7 @@ def replace_faces_with_emoji(image, emoji_path):
     )
     emoji = Image.open(emoji_path).convert("RGBA")
     for x, y, w, h in faces:
-        emoji_resized = emoji.resize(
-            (int(w * 1.2), int(h * 1.2)), Image.LANCZOS
-        )  # Scale to 120% for better coverage
+        emoji_resized = emoji.resize((int(w * 1.2), int(h * 1.2)), Image.LANCZOS)
         emoji_x = x + (w - emoji_resized.width) // 2
         emoji_y = y + (h - emoji_resized.height) // 2
         image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized)
@@ -408,28 +408,28 @@ async def pixelate(ctx, intensity: int = 5):
 
 
 @bot.command()
-async def emojify(ctx, emoji_name: str = None):  # Changed to optional parameter
-    # If no emoji_name is provided, list available emojis
+async def emojify(ctx, emoji_name: str = None):
     if not emoji_name:
         emoji_files = [
             f[:-4] for f in os.listdir(EMOJI_FOLDER) if f.lower().endswith(".png")
         ]
         if not emoji_files:
-            await ctx.send("No emojis found in the `/emojis/` folder.", delete_after=10)
+            await ctx.send(
+                f"No emojis found in the `/{EMOJI_FOLDER}/` folder.", delete_after=10
+            )
             return
         embed = Embed(
             title="Available Emojis",
-            description="Use `.emoji <emoji_name>` with one of these:\n\n"
+            description="Use `.emojify <emoji_name>` with one of these:\n\n"
             + "\n".join(f"- `{emoji}`" for emoji in emoji_files),
             color=discord.Color.blue(),
         )
         await ctx.send(embed=embed, delete_after=30)
         return
 
-    # Original logic for when an emoji_name is provided
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
     if not os.path.exists(emoji_path):
-        await ctx.send(f"Emoji `{emoji_name}` not found in `/emojis/` folder.")
+        await ctx.send(f"Emoji `{emoji_name}` not found in `/{EMOJI_FOLDER}/`.")
         return
     image = None
     if ctx.message.attachments:
@@ -642,13 +642,12 @@ async def update(ctx):
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def clearhistory(ctx):
-    history_dir = HISTORY_DIR
-    if not os.path.exists(history_dir):
+    if not os.path.exists(HISTORY_DIR):
         await ctx.send("No history directory found!", delete_after=5)
         return
     files_deleted = 0
-    for filename in os.listdir(history_dir):
-        file_path = os.path.join(history_dir, filename)
+    for filename in os.listdir(HISTORY_DIR):
+        file_path = os.path.join(HISTORY_DIR, filename)
         if os.path.isfile(file_path):
             os.remove(file_path)
             files_deleted += 1
