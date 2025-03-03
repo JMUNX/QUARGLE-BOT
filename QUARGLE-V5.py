@@ -410,6 +410,58 @@ async def ourmeme(ctx, media_type: str = None):
     await ctx.message.delete(delay=1)
 
 
+# ASCII characters from dark to light
+ASCII_CHARS = "@%#*+=-:. "
+
+
+def image_to_ascii(image, width=100):
+    # Resize image while maintaining aspect ratio
+    aspect_ratio = image.height / image.width
+    new_height = int(width * aspect_ratio * 0.55)  # Adjust for font aspect ratio
+    image = image.resize((width, new_height)).convert("L")  # Convert to grayscale
+
+    ascii_str = "".join(ASCII_CHARS[pixel // 32] for pixel in image.getdata())
+    ascii_str = "\n".join(
+        ascii_str[i : i + width] for i in range(0, len(ascii_str), width)
+    )
+
+    return ascii_str
+
+
+class AsciiConverter(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def ascii(self, ctx):
+        # Get image from attachment or replied message
+        image = None
+        if ctx.message.attachments:
+            image_bytes = await ctx.message.attachments[0].read()
+            image = Image.open(io.BytesIO(image_bytes))
+        elif ctx.message.reference:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            if ref_msg.attachments:
+                image_bytes = await ref_msg.attachments[0].read()
+                image = Image.open(io.BytesIO(image_bytes))
+
+        if image is None:
+            await ctx.send("Please upload or reply to an image.")
+            return
+
+        # Convert image to ASCII
+        ascii_art = image_to_ascii(image)
+
+        # Send ASCII art as a text file (to prevent message length issues)
+        file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
+        await ctx.send("Here is your ASCII art:", file=file)
+
+
+# Add the Cog to the bot
+async def setup(bot):
+    await bot.add_cog(AsciiConverter(bot))
+
+
 @bot.command()
 # Adds captions to an image from a referenced message or attachment
 async def caption(ctx, top_text: str = "", bottom_text: str = ""):
