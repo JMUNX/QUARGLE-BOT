@@ -329,14 +329,13 @@ async def ourmeme(ctx, media_type: str = None):
 
 # PIL Functions for Memes & Fun
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
-ASCII_CHARS_SIMPLE = "@%#*+=-:. "
 
 
 def image_to_ascii(image, width=50, dense=True):
     aspect_ratio = image.height / image.width
     new_height = int(width * aspect_ratio * 0.55)
     image = image.resize((width, new_height)).convert("L")
-    ascii_chars = ASCII_CHARS_DENSE if dense else ASCII_CHARS_SIMPLE
+    ascii_chars = ASCII_CHARS_DENSE
     ascii_str = "".join(
         ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in image.getdata()
     )
@@ -377,23 +376,6 @@ async def ascii(ctx):
     ascii_art = image_to_ascii(image, width=100, dense=True)
     file = File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
     await ctx.send("Detailed ASCII art:", file=file)
-
-
-@bot.command()
-async def asciisimple(ctx):
-    image = None
-    if ctx.message.attachments:
-        image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    elif ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.attachments:
-            image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
-    if image is None:
-        await ctx.send("Please upload or reply to an image.")
-        return
-    ascii_art = image_to_ascii(image, width=50, dense=False)
-    file = File(io.BytesIO(ascii_art.encode()), filename="ascii_simple.txt")
-    await ctx.send("Simplified ASCII art:", file=file)
 
 
 @bot.command()
@@ -699,9 +681,8 @@ COMMAND_CATEGORIES = {
         "ourmeme": "Shares a random local meme (image/video)",
         "upload": "Uploads attachments to OurMemes or Saves",
         "ascii": "Converts image to detailed ASCII art",
-        "asciisimple": "Converts image to simple ASCII art",
         "pixelate": "Pixelates an image (intensity 1-10)",
-        "emojiface": "Replaces faces in image with an emoji",
+        "emojify": "Replaces faces in image with an emoji",
         "caption": "Adds top/bottom text to an image",
         "play": "Plays a sound effect in voice channel",
     },
