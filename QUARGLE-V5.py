@@ -426,11 +426,10 @@ async def emojify(ctx, emoji_name: str = None):
 
         # Map emoji names to Unicode placeholders (customize as needed)
         emoji_previews = {
-            "smile": "😊",
-            "wink": "😉",
-            "laugh": "😂",
-            "sad": "😢",
-            "cool": "😎",
+            "freak": ":freak:",
+            "death": ":death",
+            "creep": ":creep:",
+            "chad": ":chad:",
             # Add more mappings or use a default emoji for unmapped names
         }
         default_preview = "🙂"  # Fallback for unmapped emojis
