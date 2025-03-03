@@ -302,35 +302,36 @@ async def reaction(ctx):
 
 
 @bot.command()
-async def upload(ctx, directory=OURMEMES_FOLDER):
+# Uploads attachments or GIF URLs to specified directory
+async def upload(ctx, directory="OurMemes"):
     valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
     if directory not in valid_dirs:
         await ctx.send(
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
         )
         return
-
     command_attachments = ctx.message.attachments
-    ref_attachments = []
-
+    ref_urls = []
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        # We now handle both user and bot attachments
-        if ref_msg.attachments:
-            ref_attachments = ref_msg.attachments
-            await ctx.send(
-                f"Message referenced with {len(ref_attachments)} attachment(s)"
-            )
-
-    # Combine both user and referenced message attachments
-    all_attachments = command_attachments + ref_attachments
-    if all_attachments:
-        for attachment in all_attachments:
-            # Try to download the file
-            await save_attachment(attachment, bot.http_session, directory)
-            await ctx.send(f"Downloaded: {attachment.filename}", delete_after=5)
+        ref_urls = [
+            word for word in ref_msg.content.split() if word.lower().endswith(".gif")
+        ]
+    all_items = command_attachments + [
+        type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
+        for url in ref_urls
+    ]
+    if not all_items:
+        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
+        return
+    async with aiohttp.ClientSession() as session:
+        tasks = [save_attachment(item, session, directory) for item in all_items]
+        await asyncio.gather(*tasks)
+    num_files = len(tasks)
+    if num_files == 1:
+        await ctx.send(f"1 file uploaded to {directory}", delete_after=10)
     else:
-        await ctx.send("No attachments found!", delete_after=4)
+        await ctx.send(f"{num_files} files uploaded to {directory}", delete_after=10)
 
 
 @bot.command()
