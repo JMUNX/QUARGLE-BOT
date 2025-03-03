@@ -408,13 +408,8 @@ async def pixelate(ctx, intensity: int = 5):
     await ctx.send(f"Pixelated image (Intensity {intensity}):", file=file)
 
 
-last_bot_image = None
-
-
 @bot.command()
 async def deepfry(ctx, intensity: int = 5):
-    global last_bot_image
-
     if intensity < 1 or intensity > 10:
         await ctx.send("Intensity must be between 1 and 10.")
         return
@@ -423,15 +418,11 @@ async def deepfry(ctx, intensity: int = 5):
     # Check if the message has an attachment (user uploaded an image)
     if ctx.message.attachments:
         image = Image.open(io.BytesIO(await ctx.message.attachments[0].read()))
-    # If it's a reply to another message with an image attachment (including bot's image)
+    # If it's a reply to another message with an image attachment
     elif ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
         if ref_msg.attachments:
             image = Image.open(io.BytesIO(await ref_msg.attachments[0].read()))
-        # Check if the reference is from the bot itself
-        elif ref_msg.author.id == bot.user.id and last_bot_image:
-            # Use the last sent image from the bot
-            image = last_bot_image
 
     # If no image was found, notify the user
     if image is None:
