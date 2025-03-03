@@ -169,14 +169,15 @@ async def cleanup_messages(command_msg, preview_msg) -> None:
         logger.debug(f"Failed to delete messages: {e}")
 
 
-async def save_attachment(item, session: aiohttp.ClientSession, directory: str) -> None:
-    async with session.get(item.url) as resp:
-        if resp.status == 200:
-            filename = os.path.join(directory, item.filename)
-            async with aiofiles.open(filename, "wb") as f:
-                await f.write(await resp.read())
-        else:
-            logger.warning(f"Failed to fetch attachment from {item.url}: {resp.status}")
+async def save_attachment(attachment, session, directory):
+    filename = attachment.filename
+    file_path = os.path.join(directory, filename)
+
+    # Download the attachment
+    async with session.get(attachment.url) as response:
+        with open(file_path, "wb") as f:
+            f.write(await response.read())
+    return file_path
 
 
 async def get_image_from_context(ctx) -> Optional[Image.Image]:
