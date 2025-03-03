@@ -415,10 +415,9 @@ ASCII_CHARS = "@%#*+=-:. "
 
 
 def image_to_ascii(image, width=100):
-    # Resize image while maintaining aspect ratio
     aspect_ratio = image.height / image.width
-    new_height = int(width * aspect_ratio * 0.55)  # Adjust for font aspect ratio
-    image = image.resize((width, new_height)).convert("L")  # Convert to grayscale
+    new_height = int(width * aspect_ratio * 0.55)
+    image = image.resize((width, new_height)).convert("L")
 
     ascii_str = "".join(ASCII_CHARS[pixel // 32] for pixel in image.getdata())
     ascii_str = "\n".join(
@@ -428,38 +427,24 @@ def image_to_ascii(image, width=100):
     return ascii_str
 
 
-class AsciiConverter(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.command()
-    async def ascii(self, ctx):
-        # Get image from attachment or replied message
-        image = None
-        if ctx.message.attachments:
-            image_bytes = await ctx.message.attachments[0].read()
+async def ascii(ctx):
+    image = None
+    if ctx.message.attachments:
+        image_bytes = await ctx.message.attachments[0].read()
+        image = Image.open(io.BytesIO(image_bytes))
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            image_bytes = await ref_msg.attachments[0].read()
             image = Image.open(io.BytesIO(image_bytes))
-        elif ctx.message.reference:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            if ref_msg.attachments:
-                image_bytes = await ref_msg.attachments[0].read()
-                image = Image.open(io.BytesIO(image_bytes))
 
-        if image is None:
-            await ctx.send("Please upload or reply to an image.")
-            return
+    if image is None:
+        await ctx.send("Please upload or reply to an image.")
+        return
 
-        # Convert image to ASCII
-        ascii_art = image_to_ascii(image)
-
-        # Send ASCII art as a text file (to prevent message length issues)
-        file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
-        await ctx.send("Here is your ASCII art:", file=file)
-
-
-# Add the Cog to the bot
-async def setup(bot):
-    await bot.add_cog(AsciiConverter(bot))
+    ascii_art = image_to_ascii(image)
+    file = discord.File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
+    await ctx.send("Here is your ASCII art:", file=file)
 
 
 @bot.command()
