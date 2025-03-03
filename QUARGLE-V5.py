@@ -56,11 +56,13 @@ SAVED_MESSAGES_DIR = "savedMessages"
 EMOJI_FOLDER = "emojisFolder"
 SAVES_FOLDER = "savesFolder"
 OURMEMES_FOLDER = "ourMemes"
+SOUNDS_DIR = "soundsFolder"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs(OURMEMES_FOLDER, exist_ok=True)
 os.makedirs(SAVES_FOLDER, exist_ok=True)
 os.makedirs(EMOJI_FOLDER, exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
+os.makedirs(SOUNDS_DIR, exist_ok=True)
 user_preferences = {}
 bot_images: Dict[int, Image.Image] = {}
 
@@ -301,7 +303,7 @@ async def reaction(ctx):
 @bot.command()
 async def upload(ctx, directory="ourMemes"):
     await ctx.message.delete(delay=2)
-    valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER]
+    valid_dirs = [OURMEMES_FOLDER, SAVES_FOLDER, EMOJI_FOLDER, SOUNDS_DIR]
     if directory not in valid_dirs:
         await ctx.send(
             f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=5
@@ -657,31 +659,93 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     await ctx.send(file=File(buffer, "captioned.png"))
 
 
-# Voice Commands
 @bot.command()
-async def play(ctx, sound: str):
+async def play(ctx, sound: str = None, volume: int = 50):
+    # Delete the user's command message after 2 seconds
     await ctx.message.delete(delay=2)
-    sound_files = {"laugh": "laugh.mp3", "clap": "clap.mp3"}
-    if sound not in sound_files:
-        await ctx.send(
-            f"Available sounds: {', '.join(sound_files.keys())}", delete_after=4
+
+    # Define the target voice channel ID
+    TARGET_CHANNEL_ID = 1313738797783056445
+
+    # Get the target voice channel
+    voice_channel = bot.get_channel(TARGET_CHANNEL_ID)
+    if not isinstance(voice_channel, discord.VoiceChannel):
+        await ctx.send("Target channel is not a voice channel!", delete_after=4)
+        return
+
+    # If no sound is provided, list available sounds like emojify
+    if not sound:
+        valid_extensions = (".mp3", ".wav", ".ogg")  # Supported audio formats
+        sound_files = [
+            f[: f.rfind(".")]
+            for f in os.listdir(SOUNDS_DIR)
+            if f.lower().endswith(valid_extensions)
+        ]
+        if not sound_files:
+            await ctx.send(
+                f"No sound files found in `/{SOUNDS_DIR}/`.", delete_after=10
+            )
+            return
+
+        description = "Use `.play <sound> [volume]` with one of these:\n\n" + "\n".join(
+            f"- `{sound}`" for sound in sound_files
         )
+        embed = Embed(
+            title="Available Sounds",
+            description=description[:1024],  # Limit to embed field size
+            color=discord.Color.blue(),
+        )
+        await ctx.send(embed=embed, delete_after=30)
         return
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        await ctx.send("Join a voice channel first!", delete_after=4)
+
+    # Validate volume
+    if not 1 <= volume <= 100:
+        await ctx.send("Volume must be between 1 and 100.", delete_after=4)
         return
+
+    # Check if Opus is loaded
     if not discord.opus.is_loaded():
         await ctx.send("Voice support unavailable!", delete_after=4)
         return
-    vc = await ctx.author.voice.channel.connect()
-    sound_path = os.path.join("sounds", sound_files[sound])
+
+    # Construct the sound file path
+    sound_path = os.path.join(SOUNDS_DIR, f"{sound}.mp3")  # Default to .mp3
     if not os.path.exists(sound_path):
-        await ctx.send("Sound file not found!", delete_after=4)
-        await vc.disconnect()
+        # Check other formats if .mp3 doesn’t exist
+        for ext in (".wav", ".ogg"):
+            alt_path = os.path.join(SOUNDS_DIR, f"{sound}{ext}")
+            if os.path.exists(alt_path):
+                sound_path = alt_path
+                break
+        else:
+            await ctx.send(
+                f"Sound `{sound}` not found in `/{SOUNDS_DIR}/`!", delete_after=4
+            )
+            return
+
+    # Connect to the target voice channel
+    try:
+        vc = await voice_channel.connect()
+    except discord.ClientException:
+        await ctx.send("Already connected to a voice channel!", delete_after=4)
         return
-    vc.play(discord.FFmpegPCMAudio(sound_path))
+    except Exception as e:
+        logger.error(f"Failed to connect to voice channel: {e}")
+        await ctx.send("Failed to join voice channel!", delete_after=4)
+        return
+
+    # Play the sound with volume control
+    audio_source = discord.FFmpegPCMAudio(sound_path)
+    volume_adjusted = discord.PCMVolumeTransformer(
+        audio_source, volume=volume / 100.0
+    )  # Convert percentage to 0.01-1.0
+    vc.play(volume_adjusted)
+
+    # Wait for the sound to finish playing
     while vc.is_playing():
         await asyncio.sleep(1)
+
+    # Disconnect from the voice channel
     await vc.disconnect()
 
 
