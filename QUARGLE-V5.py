@@ -669,7 +669,7 @@ FFMPEG_PATH = "/usr/bin/ffmpeg"
 async def play(ctx, sound: str = None, volume: int = 50):
     await ctx.message.delete(delay=2)
 
-    TARGET_CHANNEL_ID = 475512390536921088
+    TARGET_CHANNEL_ID = 574410799557378048
     voice_channel = bot.get_channel(TARGET_CHANNEL_ID)
 
     if not voice_channel:
