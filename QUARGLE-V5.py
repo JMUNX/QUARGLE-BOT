@@ -385,20 +385,6 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
     await ctx.send(f"{len(tasks)} file(s) uploaded to {directory}", delete_after=10)
 
 
-# Replace the existing on_message event handler
-@bot.event
-async def on_message(message):
-    global last_bot_image
-    if message.author == bot.user and message.attachments:
-        try:
-            last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
-            logger.debug(f"Stored bot image: {message.attachments[0].filename}")
-        except Exception as e:
-            logger.error(f"Failed to store bot image: {e}")
-            last_bot_image = None
-    await bot.process_commands(message)
-
-
 @bot.command()
 async def ourmeme(ctx, media_type: str = None):
     valid_exts = {"image": (".png", ".jpg", ".gif"), "video": (".mp4", ".mov", ".mkv")}
@@ -855,7 +841,12 @@ async def clearhistory_error(ctx, error):
 async def on_message(message):
     global last_bot_image
     if message.author == bot.user and message.attachments:
-        last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+        try:
+            last_bot_image = Image.open(io.BytesIO(await message.attachments[0].read()))
+            logger.debug(f"Stored bot image: {message.attachments[0].filename}")
+        except Exception as e:
+            logger.error(f"Failed to store bot image: {e}")
+            last_bot_image = None
     await bot.process_commands(message)
 
 
