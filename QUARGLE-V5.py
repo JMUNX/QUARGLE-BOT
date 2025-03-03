@@ -452,7 +452,7 @@ async def ourmeme(ctx, media_type: str = None):
 
 @bot.command()
 # Adds captions to an image from a referenced message or attachment
-async def caption(ctx, top_text: str, bottom_text: str):
+async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     image_url = None
     if ctx.message.attachments:
         image_url = ctx.message.attachments[0].url
@@ -471,13 +471,60 @@ async def caption(ctx, top_text: str, bottom_text: str):
     if not image_url:
         await ctx.send("Please attach an image or reply to one!", delete_after=4)
         return
-    captioned_image = await caption_image(
-        image_url, top_text.upper(), bottom_text.upper()
-    )
-    if not captioned_image:
-        await ctx.send("Failed to process image!", delete_after=4)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(image_url) as resp:
+            if resp.status != 200:
+                await ctx.send("Failed to fetch image!", delete_after=4)
+                return
+            image_data = await resp.read()
+
+    image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    font_size = max(20, width // 10)  # Scale font size to 1/10th of image width, min 20
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except:
+        font = ImageFont.load_default(size=font_size)
+
+    if top_text:
+        top_text = top_text.upper()
+        top_bbox = draw.textbbox((0, 0), top_text, font=font)
+        top_x = (width - (top_bbox[2] - top_bbox[0])) // 2
+        draw.text(
+            (top_x, 10),
+            top_text,
+            font=font,
+            fill="white",
+            stroke_width=2,
+            stroke_fill="black",
+        )
+
+    if bottom_text:
+        bottom_text = bottom_text.upper()
+        bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
+        bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
+        bottom_y = height - (bottom_bbox[3] - bottom_bbox[1]) - 10
+        draw.text(
+            (bottom_x, bottom_y),
+            bottom_text,
+            font=font,
+            fill="white",
+            stroke_width=2,
+            stroke_fill="black",
+        )
+
+    if not top_text and not bottom_text:
+        await ctx.send(
+            "Please provide at least one caption (top or bottom)!", delete_after=4
+        )
         return
-    await ctx.send(file=File(captioned_image, "captioned.png"))
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    await ctx.send(file=File(buffer, "captioned.png"))
 
 
 @bot.command()
