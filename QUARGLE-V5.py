@@ -57,9 +57,11 @@ profanity = Profanity()
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
 HISTORY_DIR = "Conversation_History"
 SAVED_MESSAGES_DIR = "savedMessages"
+EMOJI_FOLDER = "Emojis"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)
 os.makedirs("Saves", exist_ok=True)
+os.makedirs("Emojis", exist_ok=True)
 os.makedirs(SAVED_MESSAGES_DIR, exist_ok=True)
 user_preferences = {}
 
@@ -543,8 +545,42 @@ def replace_faces_with_emoji(image, emoji_path="emoji.png"):
     return image
 
 
+# Function to replace faces with emoji
+def replace_faces_with_emoji(image, emoji_path):
+    # Convert the image to grayscale
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+
+    # Load the face detection classifier
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+
+    # Detect faces
+    faces = face_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+    )
+
+    emoji = Image.open(emoji_path).resize((50, 50))  # Resize emoji to fit on the face
+
+    # Draw emoji faces
+    for x, y, w, h in faces:
+        # Place the emoji on the detected face
+        image.paste(emoji, (x, y), emoji.convert("RGBA"))
+
+    return image
+
+
 @bot.command()
-async def emojiface(ctx):
+async def emojiface(ctx, emoji_name: str):
+    # Check if the emoji file exists in the emojis folder
+    emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
+
+    if not os.path.exists(emoji_path):
+        await ctx.send(
+            f"Emoji `{emoji_name}` not found. Please make sure the file exists in the `/emojis/` folder."
+        )
+        return
+
     # Check if there is an attachment or a replied image
     image = None
     if ctx.message.attachments:
@@ -560,8 +596,7 @@ async def emojiface(ctx):
         await ctx.send("Please upload or reply to an image.")
         return
 
-    # Replace faces with emojis
-    emoji_path = "path/to/emoji.png"  # Adjust the path to your emoji image
+    # Replace faces with the selected emoji
     image = replace_faces_with_emoji(image, emoji_path)
 
     # Save the resulting image to a BytesIO object
@@ -570,7 +605,9 @@ async def emojiface(ctx):
     img_bytes.seek(0)
 
     file = discord.File(img_bytes, filename="emoji_faces.png")
-    await ctx.send("Here is your image with emoji faces:", file=file)
+    await ctx.send(
+        f"Here is your image with the `{emoji_name}` emoji faces:", file=file
+    )
 
 
 @bot.command()
