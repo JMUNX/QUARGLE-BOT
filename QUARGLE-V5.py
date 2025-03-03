@@ -450,14 +450,46 @@ def deepfry_image(image: Image, intensity: int) -> Image:
     width, height = image.size
     pixels = image.load()
 
-    for i in range(width):
-        for j in range(height):
-            r, g, b = pixels[i, j]
-            # Add random noise to RGB values
-            r = min(255, max(0, r + random.randint(-intensity * 10, intensity * 10)))
-            g = min(255, max(0, g + random.randint(-intensity * 10, intensity * 10)))
-            b = min(255, max(0, b + random.randint(-intensity * 10, intensity * 10)))
-            pixels[i, j] = (r, g, b)
+    # Check if the image is in RGBA (if it has an alpha channel)
+    if image.mode == "RGBA":
+        for i in range(width):
+            for j in range(height):
+                r, g, b, a = pixels[i, j]
+                # Add random noise to RGB values
+                r = min(
+                    255, max(0, r + random.randint(-intensity * 10, intensity * 10))
+                )
+                g = min(
+                    255, max(0, g + random.randint(-intensity * 10, intensity * 10))
+                )
+                b = min(
+                    255, max(0, b + random.randint(-intensity * 10, intensity * 10))
+                )
+                pixels[i, j] = (r, g, b, a)
+    elif image.mode == "RGB":
+        for i in range(width):
+            for j in range(height):
+                r, g, b = pixels[i, j]
+                # Add random noise to RGB values
+                r = min(
+                    255, max(0, r + random.randint(-intensity * 10, intensity * 10))
+                )
+                g = min(
+                    255, max(0, g + random.randint(-intensity * 10, intensity * 10))
+                )
+                b = min(
+                    255, max(0, b + random.randint(-intensity * 10, intensity * 10))
+                )
+                pixels[i, j] = (r, g, b)
+    elif image.mode == "L":  # Grayscale image
+        for i in range(width):
+            for j in range(height):
+                pixel = pixels[i, j]
+                # Add random noise to the grayscale value
+                pixel = min(
+                    255, max(0, pixel + random.randint(-intensity * 10, intensity * 10))
+                )
+                pixels[i, j] = pixel
 
     # Apply a subtle blur to make the effect even more chaotic
     image = image.filter(ImageFilter.GaussianBlur(radius=intensity / 3))
