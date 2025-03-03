@@ -200,46 +200,6 @@ async def save_attachment(item, session, directory):
                 await f.write(await resp.read())
 
 
-# Adds text captions to an image
-async def caption_image(image_url, top_text, bottom_text):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(image_url) as resp:
-            if resp.status != 200:
-                return None
-            image_data = await resp.read()
-    image = Image.open(io.BytesIO(image_data)).convert("RGBA")
-    draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.truetype("arial.ttf", 40)
-    except:
-        font = ImageFont.load_default()
-    width, height = image.size
-    top_bbox = draw.textbbox((0, 0), top_text, font=font)
-    bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
-    top_x = (width - (top_bbox[2] - top_bbox[0])) // 2
-    bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
-    draw.text(
-        (top_x, 10),
-        top_text,
-        font=font,
-        fill="white",
-        stroke_width=2,
-        stroke_fill="black",
-    )
-    draw.text(
-        (bottom_x, height - 50),
-        bottom_text,
-        font=font,
-        fill="white",
-        stroke_width=2,
-        stroke_fill="black",
-    )
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    buffer.seek(0)
-    return buffer
-
-
 # Utility Commands
 @bot.command()
 @commands.has_permissions(manage_messages=True)
