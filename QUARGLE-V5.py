@@ -444,7 +444,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     width, height = image.size
     font_size = max(20, width // 10)  # Scale font size to 1/10th of image width, min 20
     try:
-        font = ImageFont.truetype("arial.ttf", font_size)
+        font = ImageFont.truetype("comic.ttf", font_size)
     except:
         font = ImageFont.load_default(size=font_size)
 
