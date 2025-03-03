@@ -50,9 +50,9 @@ bot.remove_command("help")
 executor = ThreadPoolExecutor(max_workers=4)
 profanity = Profanity()
 BOT_IDENTITY = "I am QUARGLE, your AI-powered assistant! I assist users in this Discord server by answering questions, generating ideas, and helping with tasks. I keep answers short, concise and simple"
-HISTORY_DIR = "Conversation_History"
+HISTORY_DIR = "conversationHistory"
 SAVED_MESSAGES_DIR = "savedMessages"
-EMOJI_FOLDER = "Emojis"
+EMOJI_FOLDER = "emojisFolder"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 os.makedirs("OurMemes", exist_ok=True)
 os.makedirs("Saves", exist_ok=True)
@@ -426,7 +426,7 @@ async def pixelate(ctx, intensity: int = 5):
 
 
 @bot.command()
-async def emojiface(ctx, emoji_name: str = None):  # Changed to optional parameter
+async def emojify(ctx, emoji_name: str = None):  # Changed to optional parameter
     # If no emoji_name is provided, list available emojis
     if not emoji_name:
         emoji_files = [
@@ -437,7 +437,7 @@ async def emojiface(ctx, emoji_name: str = None):  # Changed to optional paramet
             return
         embed = Embed(
             title="Available Emojis",
-            description="Use `.emojiface <emoji_name>` with one of these:\n\n"
+            description="Use `.emoji <emoji_name>` with one of these:\n\n"
             + "\n".join(f"- `{emoji}`" for emoji in emoji_files),
             color=discord.Color.blue(),
         )
@@ -649,36 +649,6 @@ async def imagine(ctx, *, inputText: str):
         await ctx.send("Failed to generate image.", delete_after=2)
 
 
-@bot.command()
-async def sentiment(ctx):
-    if not ctx.message.reference:
-        await ctx.send("Reply to a message to analyze!", delete_after=4)
-        return
-    ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-    openai.api_key = OPENAI_GPT_TOKEN
-    prompt = f"Analyze the sentiment of this text: '{ref_msg.content}'"
-    try:
-        response = await bot.loop.run_in_executor(
-            None,
-            lambda: openai.chat.completions.create(
-                model="gpt-4o", messages=[{"role": "user", "content": prompt}]
-            ),
-        )
-        sentiment = response.choices[0].message.content
-        embed = Embed(
-            title=f"Sentiment Analysis for {ref_msg.author.name}",
-            description=sentiment,
-            color=discord.Color.blue(),
-        )
-        embed.add_field(
-            name="Original Message", value=ref_msg.content[:1024], inline=False
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Sentiment error: {e}")
-        await ctx.send("Failed to analyze sentiment.", delete_after=4)
-
-
 # Admin Commands
 @bot.command()
 async def update(ctx):
@@ -739,7 +709,6 @@ COMMAND_CATEGORIES = {
         "setcontext": "Sets custom context for AI responses",
         "QUARGLE": "Chats with QUARGLE AI",
         "imagine": "Generates an image with DALL-E 3",
-        "sentiment": "Analyzes sentiment of a referenced message",
     },
     "Admin Tools": {
         "clearhistory": "Clears all conversation history (Admin required)",
