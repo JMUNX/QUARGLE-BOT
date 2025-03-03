@@ -532,10 +532,15 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
     draw = ImageDraw.Draw(image)
     width, height = image.size
 
-    # Font setup with dynamic scaling
-    base_font_size = width // 10  # Starting point based on image width
-    font_path = "comic.ttf" if os.path.exists("comic.ttf") else None
-    max_width = width * 0.9  # Allow 90% of image width for text
+    # Font setup with Comic Sans
+    font_path = "comic.ttf"  # Adjust to "ComicSansMS.ttf" if needed
+    if not os.path.exists(font_path):
+        await ctx.send(
+            "Comic Sans font file not found! Using default font.", delete_after=4
+        )
+        font_path = None
+    base_font_size = width // 10  # Starting font size
+    max_width = width * 0.9  # 90% of image width for text
 
     def wrap_text(text, font, max_width):
         """Wrap text into multiple lines to fit within max_width."""
@@ -564,10 +569,14 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 else ImageFont.load_default(size=font_size)
             )
             lines = wrap_text(text, font, max_width)
-            total_height = sum(
-                draw.textbbox((0, 0), line, font=font)[3]
-                - draw.textbbox((0, 0), line, font=font)[1]
-                for line in lines
+            total_height = (
+                len(lines)
+                * (
+                    draw.textbbox((0, 0), lines[0], font=font)[3]
+                    - draw.textbbox((0, 0), lines[0], font=font)[1]
+                    + 5
+                )
+                - 5
             )
             total_width = max(
                 draw.textbbox((0, 0), line, font=font)[2]
@@ -593,8 +602,9 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         line_height = (
             draw.textbbox((0, 0), top_lines[0], font=font)[3]
             - draw.textbbox((0, 0), top_lines[0], font=font)[1]
+            + 5
         )
-        y_offset = 10  # Starting padding
+        y_offset = 10  # Starting padding from top
         for line in top_lines:
             bbox = draw.textbbox((0, 0), line, font=font)
             x = (width - (bbox[2] - bbox[0])) // 2
@@ -606,7 +616,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 stroke_width=2,
                 stroke_fill="black",
             )
-            y_offset += line_height + 5  # Add spacing between lines
+            y_offset += line_height
 
     if bottom_text:
         bottom_text = bottom_text.upper()
@@ -616,11 +626,22 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         line_height = (
             draw.textbbox((0, 0), bottom_lines[0], font=font)[3]
             - draw.textbbox((0, 0), bottom_lines[0], font=font)[1]
+            + 5
         )
-        total_height = (
-            len(bottom_lines) * (line_height + 5) - 5
-        )  # Total height of text block
-        y_offset = height - total_height - 20  # Start from bottom with padding
+        total_height = len(bottom_lines) * line_height
+        y_offset = height - total_height - 20  # Ensure it fits above bottom edge
+        if y_offset < height // 3 * 2:  # Prevent overlap with top text
+            y_offset = height // 3 * 2  # Start at 2/3rds height if needed
+            font, bottom_lines = get_font_size(
+                bottom_text, max_width, height - y_offset - 20, base_font_size
+            )  # Recalculate with new height
+            line_height = (
+                draw.textbbox((0, 0), bottom_lines[0], font=font)[3]
+                - draw.textbbox((0, 0), bottom_lines[0], font=font)[1]
+                + 5
+            )
+            total_height = len(bottom_lines) * line_height
+            y_offset = height - total_height - 20  # Recalculate y_offset
         for line in bottom_lines:
             bbox = draw.textbbox((0, 0), line, font=font)
             x = (width - (bbox[2] - bbox[0])) // 2
@@ -632,7 +653,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
                 stroke_width=2,
                 stroke_fill="black",
             )
-            y_offset += line_height + 5  # Add spacing between lines
+            y_offset += line_height
 
     if not top_text and not bottom_text:
         await ctx.send("Provide at least one caption!", delete_after=4)
