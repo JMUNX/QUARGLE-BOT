@@ -426,7 +426,25 @@ async def pixelate(ctx, intensity: int = 5):
 
 
 @bot.command()
-async def emojiface(ctx, emoji_name: str):
+async def emojiface(ctx, emoji_name: str = None):  # Changed to optional parameter
+    # If no emoji_name is provided, list available emojis
+    if not emoji_name:
+        emoji_files = [
+            f[:-4] for f in os.listdir(EMOJI_FOLDER) if f.lower().endswith(".png")
+        ]
+        if not emoji_files:
+            await ctx.send("No emojis found in the `/emojis/` folder.", delete_after=10)
+            return
+        embed = Embed(
+            title="Available Emojis",
+            description="Use `.emojiface <emoji_name>` with one of these:\n\n"
+            + "\n".join(f"- `{emoji}`" for emoji in emoji_files),
+            color=discord.Color.blue(),
+        )
+        await ctx.send(embed=embed, delete_after=30)
+        return
+
+    # Original logic for when an emoji_name is provided
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
     if not os.path.exists(emoji_path):
         await ctx.send(f"Emoji `{emoji_name}` not found in `/emojis/` folder.")
