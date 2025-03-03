@@ -413,7 +413,7 @@ async def emojify(ctx, emoji_name: str = None):
         # List all files with valid image extensions in EMOJI_FOLDER
         valid_extensions = (".png", ".jpg", ".jpeg", ".gif")
         emoji_files = [
-            f
+            f[: f.rfind(".")]  # Strip extension
             for f in os.listdir(EMOJI_FOLDER)
             if os.path.isfile(os.path.join(EMOJI_FOLDER, f))
             and f.lower().endswith(valid_extensions)
@@ -424,46 +424,59 @@ async def emojify(ctx, emoji_name: str = None):
             )
             return
 
-        # Prepare embed and attachments
+        # Map emoji names to Unicode placeholders (customize as needed)
+        emoji_previews = {
+            "smile": "😊",
+            "wink": "😉",
+            "laugh": "😂",
+            "sad": "😢",
+            "cool": "😎",
+            # Add more mappings or use a default emoji for unmapped names
+        }
+        default_preview = "🙂"  # Fallback for unmapped emojis
+
+        # Build the description with names and emoji previews
+        description = "Use `.emojify <emoji_name>` with one of these:\n\n"
+        for emoji in emoji_files:
+            preview = emoji_previews.get(emoji.lower(), default_preview)
+            description += f"- {preview} `{emoji}`\n"
+
         embed = Embed(
             title="Available Emojis",
-            description="Use `.emojify <emoji_name>` with one of these:\n\n"
-            + "\n".join(f"- `{f[:f.rfind('.')]}`" for f in emoji_files),
+            description=description,
             color=discord.Color.blue(),
         )
-        attachments = []
 
-        # Attach up to 10 emoji images
-        for emoji_file in emoji_files[
-            :10
-        ]:  # Limit to 10 due to Discord's attachment cap
-            file_path = os.path.join(EMOJI_FOLDER, emoji_file)
-            # Resize image to a small thumbnail size (e.g., 64x64)
-            with Image.open(file_path) as img:
-                img.thumbnail((64, 64), Image.LANCZOS)  # Resize to thumbnail
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format="PNG")
-                img_bytes.seek(0)
-                attachments.append(File(img_bytes, filename=emoji_file))
-
-        # Send the embed with attachments
-        await ctx.send(embed=embed, files=attachments, delete_after=30)
-
-        # If more than 10 emojis, send additional messages
-        if len(emoji_files) > 10:
-            remaining_emojis = emoji_files[10:]
-            for i in range(0, len(remaining_emojis), 10):
-                batch = remaining_emojis[i : i + 10]
-                batch_attachments = []
-                for emoji_file in batch:
-                    file_path = os.path.join(EMOJI_FOLDER, emoji_file)
-                    with Image.open(file_path) as img:
-                        img.thumbnail((64, 64), Image.LANCZOS)
-                        img_bytes = io.BytesIO()
-                        img.save(img_bytes, format="PNG")
-                        img_bytes.seek(0)
-                        batch_attachments.append(File(img_bytes, filename=emoji_file))
-                await ctx.send(files=batch_attachments, delete_after=30)
+        # Check embed size (Discord limit: 6000 total characters, 1024 per description)
+        if len(description) > 1024:
+            # Split into multiple embeds if too long
+            lines = description.split("\n")
+            current_desc = "Use `.emojify <emoji_name>` with one of these:\n\n"
+            embeds = []
+            for line in lines[2:]:  # Skip initial header lines
+                if len(current_desc) + len(line) + 1 > 1024:
+                    embeds.append(
+                        Embed(
+                            title="Available Emojis (Continued)",
+                            description=current_desc,
+                            color=discord.Color.blue(),
+                        )
+                    )
+                    current_desc = "Use `.emojify <emoji_name>` with one of these:\n\n"
+                current_desc += line + "\n"
+            if current_desc.strip():
+                embeds.append(
+                    Embed(
+                        title="Available Emojis (Continued)",
+                        description=current_desc,
+                        color=discord.Color.blue(),
+                    )
+                )
+            embeds[0].title = "Available Emojis"  # First embed keeps original title
+            for embed in embeds:
+                await ctx.send(embed=embed, delete_after=30)
+        else:
+            await ctx.send(embed=embed, delete_after=30)
         return
 
     emoji_path = os.path.join(EMOJI_FOLDER, f"{emoji_name}.png")
