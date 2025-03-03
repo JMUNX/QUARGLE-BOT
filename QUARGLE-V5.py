@@ -315,12 +315,14 @@ async def upload(ctx, directory=OURMEMES_FOLDER):
 
     if ctx.message.reference:
         ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        if ref_msg.author == bot.user and ref_msg.attachments:
+        # We now handle both user and bot attachments
+        if ref_msg.attachments:
             ref_attachments = ref_msg.attachments
             await ctx.send(
-                f"Bot message referenced with {len(ref_attachments)} attachment(s)"
+                f"Message referenced with {len(ref_attachments)} attachment(s)"
             )
 
+    # Combine both user and referenced message attachments
     all_attachments = command_attachments + ref_attachments
     if all_attachments:
         for attachment in all_attachments:
