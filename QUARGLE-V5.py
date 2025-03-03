@@ -1,5 +1,5 @@
 import discord
-from discord import Member, Embed, File
+from discord import Member, Embed, File, SelectOption, ui
 from discord.ext import commands
 import random
 import asyncio
@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from better_profanity import Profanity
+from PIL import Image, ImageDraw, ImageFont
+import io
+import discord.opus
 
 # Bot Configuration and Setup
 logging.basicConfig(
@@ -37,6 +40,7 @@ if not BOT_TOKEN or not OPENAI_GPT_TOKEN:
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.voice_states = True  # Added for voice channel support
 bot = commands.Bot(
     command_prefix=".", intents=intents, case_insensitive=True, max_messages=1000
 )
@@ -58,6 +62,9 @@ user_preferences = {}
 @bot.event
 # Handles bot startup and announcement
 async def on_ready():
+    # Ensure Opus is loaded for voice features
+    if not discord.opus.is_loaded():
+        discord.opus.load_opus("libopus.so")  # Adjust path based on your system
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
@@ -180,6 +187,46 @@ async def save_attachment(item, session, directory):
             filename = os.path.join(directory, item.filename)
             async with aiofiles.open(filename, "wb") as f:
                 await f.write(await resp.read())
+
+
+# Adds text captions to an image
+async def caption_image(image_url, top_text, bottom_text):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(image_url) as resp:
+            if resp.status != 200:
+                return None
+            image_data = await resp.read()
+    image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("arial.ttf", 40)  # Ensure arial.ttf is available
+    except:
+        font = ImageFont.load_default()
+    width, height = image.size
+    top_bbox = draw.textbbox((0, 0), top_text, font=font)
+    bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
+    top_x = (width - (top_bbox[2] - top_bbox[0])) // 2
+    bottom_x = (width - (bottom_bbox[2] - bottom_bbox[0])) // 2
+    draw.text(
+        (top_x, 10),
+        top_text,
+        font=font,
+        fill="white",
+        stroke_width=2,
+        stroke_fill="black",
+    )
+    draw.text(
+        (bottom_x, height - 50),
+        bottom_text,
+        font=font,
+        fill="white",
+        stroke_width=2,
+        stroke_fill="black",
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
 
 
 # Utility Commands
@@ -335,8 +382,14 @@ async def reaction(ctx):
 
 
 @bot.command()
-# Uploads attachments or GIF URLs to OurMemes directory
-async def upload(ctx):
+# Uploads attachments or GIF URLs to specified directory
+async def upload(ctx, directory="OurMemes"):
+    valid_dirs = ["OurMemes", "Saves"]
+    if directory not in valid_dirs:
+        await ctx.send(
+            f"Invalid directory! Use: {', '.join(valid_dirs)}", delete_after=4
+        )
+        return
     command_attachments = ctx.message.attachments
     ref_urls = []
     if ctx.message.reference:
@@ -352,40 +405,13 @@ async def upload(ctx):
         await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
         return
     async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(item, session, "OurMemes") for item in all_items]
+        tasks = [save_attachment(item, session, directory) for item in all_items]
         await asyncio.gather(*tasks)
     num_files = len(tasks)
     if num_files == 1:
-        await ctx.send("1 file uploaded", delete_after=10)
+        await ctx.send(f"1 file uploaded to {directory}", delete_after=10)
     else:
-        await ctx.send(f"{num_files} files uploaded", delete_after=10)
-
-
-@bot.command()
-# Uploads attachments or GIF URLs to Saves directory
-async def save(ctx):
-    command_attachments = ctx.message.attachments
-    ref_urls = []
-    if ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        ref_urls = [
-            word for word in ref_msg.content.split() if word.lower().endswith(".gif")
-        ]
-    all_items = command_attachments + [
-        type("obj", (), {"url": url, "filename": url.split("/")[-1]})()
-        for url in ref_urls
-    ]
-    if not all_items:
-        await ctx.send("No attachments or GIF links found to upload!", delete_after=4)
-        return
-    async with aiohttp.ClientSession() as session:
-        tasks = [save_attachment(item, session, "Saves") for item in all_items]
-        await asyncio.gather(*tasks)
-    num_files = len(tasks)
-    if num_files == 1:
-        await ctx.send("1 file uploaded", delete_after=10)
-    else:
-        await ctx.send(f"{num_files} files uploaded", delete_after=10)
+        await ctx.send(f"{num_files} files uploaded to {directory}", delete_after=10)
 
 
 @bot.command()
@@ -411,6 +437,64 @@ async def ourmeme(ctx, media_type: str = None):
     else:
         await ctx.send(content=title, file=file)
     await ctx.message.delete(delay=1)
+
+
+@bot.command()
+# Adds captions to an image from a referenced message or attachment
+async def caption(ctx, top_text: str, bottom_text: str):
+    image_url = None
+    if ctx.message.attachments:
+        image_url = ctx.message.attachments[0].url
+    elif ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        if ref_msg.attachments:
+            image_url = ref_msg.attachments[0].url
+        else:
+            urls = [
+                word
+                for word in ref_msg.content.split()
+                if word.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))
+            ]
+            if urls:
+                image_url = urls[0]
+    if not image_url:
+        await ctx.send("Please attach an image or reply to one!", delete_after=4)
+        return
+    captioned_image = await caption_image(
+        image_url, top_text.upper(), bottom_text.upper()
+    )
+    if not captioned_image:
+        await ctx.send("Failed to process image!", delete_after=4)
+        return
+    await ctx.send(file=File(captioned_image, "captioned.png"))
+
+
+@bot.command()
+# Plays a sound effect in the user’s voice channel
+async def play(ctx, sound: str):
+    sound_files = {
+        "laugh": "laugh.mp3",  # Add your sound files to a "sounds" directory
+        "clap": "clap.mp3",
+    }
+    if sound not in sound_files:
+        await ctx.send(
+            f"Available sounds: {', '.join(sound_files.keys())}", delete_after=4
+        )
+        return
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("You need to be in a voice channel!", delete_after=4)
+        return
+    voice_channel = ctx.author.voice.channel
+    vc = await voice_channel.connect()
+    sound_path = os.path.join("sounds", sound_files[sound])
+    if not os.path.exists(sound_path):
+        await ctx.send("Sound file not found!", delete_after=4)
+        await vc.disconnect()
+        return
+    vc.play(discord.FFmpegPCMAudio(sound_path))
+    while vc.is_playing():
+        await asyncio.sleep(1)
+    await vc.disconnect()
 
 
 # AI Feature Commands
@@ -515,6 +599,38 @@ async def imagine(ctx, *, inputText: str):
         await ctx.send("Failed to generate image.", delete_after=2)
 
 
+@bot.command()
+# Analyzes sentiment of a referenced message
+async def sentiment(ctx):
+    if not ctx.message.reference:
+        await ctx.send("Please reply to a message to analyze!", delete_after=4)
+        return
+    ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    openai.api_key = OPENAI_GPT_TOKEN
+    prompt = f"Analyze the sentiment of this text: '{ref_msg.content}'"
+    try:
+        response = await bot.loop.run_in_executor(
+            None,
+            lambda: openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+            ),
+        )
+        sentiment = response.choices[0].message.content
+        embed = Embed(
+            title=f"Sentiment Analysis for {ref_msg.author.name}",
+            description=sentiment,
+            color=discord.Color.blue(),
+        )
+        embed.add_field(
+            name="Original Message", value=ref_msg.content[:1024], inline=False
+        )
+        await ctx.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Sentiment error: {e}")
+        await ctx.send("Failed to analyze sentiment.", delete_after=4)
+
+
 # Admin Commands
 @bot.command()
 # Shuts down bot for updates
@@ -603,9 +719,48 @@ async def savemessage(ctx):
     await ctx.message.delete(delay=1)
 
 
+class MessageSelect(ui.Select):
+    def __init__(self, messages, member):
+        self.messages = messages
+        self.member = member
+        options = [
+            SelectOption(
+                label=f"Message {i+1}", value=str(i), description=msg["content"][:50]
+            )
+            for i, msg in enumerate(
+                messages[:25]
+            )  # Limit to 25 due to Discord constraints
+        ]
+        super().__init__(placeholder="Select a message...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.view.ctx.author:
+            await interaction.response.send_message(
+                "This isn’t your selection!", ephemeral=True
+            )
+            return
+        selected_idx = int(self.values[0])
+        msg = self.messages[selected_idx]
+        embed = Embed(
+            title=f"Message from {self.member.name}",
+            description=msg["content"],
+            color=discord.Color.gold(),
+        )
+        embed.set_footer(text=f"Saved on: {msg['timestamp']}")
+        await interaction.response.send_message(embed=embed)
+        self.view.stop()
+
+
+class MessageView(ui.View):
+    def __init__(self, ctx, messages, member):
+        super().__init__(timeout=30)
+        self.ctx = ctx
+        self.add_item(MessageSelect(messages, member))
+
+
 @bot.command()
-# Lists or retrieves saved messages for a user
-async def mentionmessage(ctx, member: Member, message_number: int = None):
+# Lists or retrieves saved messages for a user with pagination
+async def mentionmessage(ctx, member: Member, page: int = 1):
     user_id = member.id
     file_path = get_saved_messages_file(user_id)
     if not os.path.exists(file_path):
@@ -621,40 +776,31 @@ async def mentionmessage(ctx, member: Member, message_number: int = None):
     if not messages:
         await ctx.send(f"No saved messages found for {member.name}!", delete_after=5)
         return
-    if message_number is None:
-        embed = Embed(
-            title=f"Saved Messages for {member.name}",
-            color=discord.Color.gold(),
-            description="Select a message by using `.mentionmessage @user <number>`",
-        )
-        for i, msg in enumerate(messages, 1):
-            preview = msg["content"][:50] + ("..." if len(msg["content"]) > 50 else "")
-            embed.add_field(
-                name=f"{i}. {msg['timestamp']}", value=preview, inline=False
-            )
-        preview_msg = await ctx.send(embed=embed)
-        bot.loop.create_task(cleanup_messages(ctx.message, preview_msg))
-    else:
-        if not 1 <= message_number <= len(messages):
-            await ctx.send(
-                f"Invalid message number! Use 1 to {len(messages)}.", delete_after=5
-            )
-            return
-        selected_msg = messages[message_number - 1]
-        embed = Embed(
-            title=f"Message from {member.name}",
-            description=selected_msg["content"],
-            color=discord.Color.gold(),
-        )
-        embed.set_footer(text=f"Saved on: {selected_msg['timestamp']}")
-        await ctx.send(embed=embed)
-        await ctx.message.delete(delay=1)
+    ITEMS_PER_PAGE = 5
+    total_pages = (len(messages) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    if page < 1 or page > total_pages:
+        await ctx.send(f"Invalid page! Use 1 to {total_pages}.", delete_after=5)
+        return
+    start = (page - 1) * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    embed = Embed(
+        title=f"Saved Messages for {member.name} (Page {page}/{total_pages})",
+        color=discord.Color.gold(),
+        description="Select a message below or use `.mentionmessage @user <page>`",
+    )
+    for i, msg in enumerate(messages[start:end], start + 1):
+        preview = msg["content"][:50] + ("..." if len(msg["content"]) > 50 else "")
+        embed.add_field(name=f"{i}. {msg['timestamp']}", value=preview, inline=False)
+    view = MessageView(ctx, messages, member)
+    preview_msg = await ctx.send(embed=embed, view=view)
+    await view.wait()
+    await preview_msg.edit(view=None)  # Remove select menu after interaction
 
 
 # Help Menu
 COMMAND_CATEGORIES = {
     "Utilities": {
-        "clear": "Clears up to 100 messages (Manage Messages required)",
+        "clear": "Clears up to 200 messages (Manage Messages required)",
         "getpfp": "Shows a user’s avatar (defaults to caller)",
         "weather": "Shows 3-day forecast for a city",
         "debug": "Sends a debug message",
@@ -664,12 +810,15 @@ COMMAND_CATEGORIES = {
         "meme": "Posts a random Reddit meme",
         "reaction": "Replies with a GIF to a referenced message",
         "ourmeme": "Shares a random local meme (image/video)",
-        "upload": "Uploads attachments to local meme storage",
+        "upload": "Uploads attachments to OurMemes or Saves (e.g., .upload Saves)",
+        "caption": "Adds top and bottom text to an image",
+        "play": "Plays a sound effect in your voice channel",
     },
     "AI Features": {
         "setcontext": "Sets custom context for AI responses",
         "QUARGLE": "Chats with QUARGLE AI",
         "imagine": "Generates an image with DALL-E 3",
+        "sentiment": "Analyzes the sentiment of a referenced message",
     },
     "Admin Tools": {
         "clearhistory": "Clears all conversation history files (Admin required)",
@@ -677,7 +826,7 @@ COMMAND_CATEGORIES = {
     },
     "Message Management": {
         "savemessage": "Saves a replied-to message to a JSON file",
-        "mentionmessage": "Lists or retrieves saved messages for a user",
+        "mentionmessage": "Lists saved messages with pagination or retrieves one",
     },
 }
 COLORS = {
@@ -689,50 +838,51 @@ COLORS = {
 }
 
 
-@bot.command(name="help")
-# Displays an interactive help menu
-async def help_command(ctx):
-    pages = []
-    for i, (cat, cmds) in enumerate(COMMAND_CATEGORIES.items()):
+class HelpSelect(ui.Select):
+    def __init__(self):
+        options = [
+            SelectOption(label=cat, value=cat) for cat in COMMAND_CATEGORIES.keys()
+        ]
+        super().__init__(placeholder="Select a category...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.view.ctx.author:
+            await interaction.response.send_message(
+                "This isn’t your help menu!", ephemeral=True
+            )
+            return
+        cat = self.values[0]
         embed = Embed(
             title=f"QUARGLE-HELP - {cat}",
             color=COLORS.get(cat, discord.Color.blue()),
             description=f"Commands for {cat.lower()}.",
         )
-        for cmd, desc in cmds.items():
+        for cmd, desc in COMMAND_CATEGORIES[cat].items():
             embed.add_field(name=f".{cmd}", value=desc, inline=False)
-        embed.set_footer(text=f"Page {i+1}/{len(COMMAND_CATEGORIES)} | Prefix: .")
-        pages.append(embed)
-    current_page = 0
-    message = await ctx.send(embed=pages[current_page])
-    await message.add_reaction("⬅️")
-    await message.add_reaction("➡️")
-    await message.add_reaction("❌")
+        embed.set_footer(text="Prefix: .")
+        await interaction.response.edit_message(embed=embed)
 
-    def check(reaction, user):
-        return (
-            user == ctx.author
-            and reaction.message.id == message.id
-            and str(reaction.emoji) in ["⬅️", "➡️", "❌"]
-        )
 
-    while True:
-        try:
-            reaction, user = await bot.wait_for(
-                "reaction_add", timeout=60.0, check=check
-            )
-            if str(reaction.emoji) == "➡️" and current_page < len(pages) - 1:
-                current_page += 1
-            elif str(reaction.emoji) == "⬅️" and current_page > 0:
-                current_page -= 1
-            elif str(reaction.emoji) == "❌":
-                await message.delete()
-                break
-            await message.edit(embed=pages[current_page])
-            await message.remove_reaction(reaction, user)
-        except asyncio.TimeoutError:
-            await message.clear_reactions()
-            break
+class HelpView(ui.View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.add_item(HelpSelect())
+
+
+@bot.command(name="help")
+# Displays an interactive help menu with select dropdown
+async def help_command(ctx):
+    embed = Embed(
+        title="QUARGLE-HELP",
+        description="Select a category below to view commands.",
+        color=discord.Color.blue(),
+    )
+    embed.set_footer(text="Prefix: .")
+    view = HelpView(ctx)
+    msg = await ctx.send(embed=embed, view=view)
+    await view.wait()
+    await msg.edit(view=None)  # Remove select menu after timeout/interaction
 
 
 # Start Bot
