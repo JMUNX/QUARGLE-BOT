@@ -85,7 +85,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.50"
+        version = "69.420.51"
         embed = Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -264,7 +264,7 @@ async def meme(ctx):
                 return
         except Exception as e:
             logger.error(f"Meme fetch failed for {meme_url}: {e}")
-    await ctx.send("Failed to fetch meme!", delete_after=3)
+    await ctx.send("Failed to fetch meme!", delete_after=2)
 
 
 @bot.command()
@@ -364,52 +364,10 @@ async def ourmeme(ctx, media_type: str = None):
         await ctx.send(embed=embed, file=file)
     else:
         await ctx.send(content=title, file=file)
-    await ctx.message.delete(delay=1)
 
 
 # Image Processing Commands
 ASCII_CHARS_DENSE = "@#S%?*+;:,. "
-
-
-def image_to_ascii(image: Image.Image, width: int = 50, dense: bool = True) -> str:
-    aspect_ratio = image.height / image.width
-    new_height = int(width * aspect_ratio * 0.55)
-    image = image.resize((width, new_height)).convert("L")
-    ascii_chars = ASCII_CHARS_DENSE
-    pixels = np.array(image)
-    ascii_str = "".join(
-        ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in pixels.flatten()
-    )
-    return "\n".join(ascii_str[i : i + width] for i in range(0, len(ascii_str), width))
-
-
-def replace_faces_with_emoji(image: Image.Image, emoji_path: str) -> Image.Image:
-    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-    faces = face_cascade.detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
-    emoji = Image.open(emoji_path).convert("RGBA")
-    for x, y, w, h in faces:
-        emoji_resized = emoji.resize((int(w * 1.2), int(h * 1.2)), Image.LANCZOS)
-        emoji_x = x + (w - emoji_resized.width) // 2
-        emoji_y = y + (h - emoji_resized.height) // 2
-        image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized)
-    return image
-
-
-def deepfry_image(image: Image.Image, intensity: int) -> Image.Image:
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1 + intensity / 5.0)
-    img_array = np.array(image)
-    noise = np.random.randint(
-        -intensity * 5, intensity * 5 + 1, img_array.shape, dtype=np.int16
-    )
-    img_array = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-    image = Image.fromarray(img_array)
-    return image.filter(ImageFilter.GaussianBlur(radius=intensity / 5.0))
 
 
 @bot.command()
@@ -422,6 +380,18 @@ async def ascii(ctx):
     ascii_art = image_to_ascii(image, width=100)
     file = File(io.BytesIO(ascii_art.encode()), filename="ascii_art.txt")
     await ctx.send("Detailed ASCII art:", file=file)
+
+
+def image_to_ascii(image: Image.Image, width: int = 50, dense: bool = True) -> str:
+    aspect_ratio = image.height / image.width
+    new_height = int(width * aspect_ratio * 0.55)
+    image = image.resize((width, new_height)).convert("L")
+    ascii_chars = ASCII_CHARS_DENSE
+    pixels = np.array(image)
+    ascii_str = "".join(
+        ascii_chars[pixel * (len(ascii_chars) - 1) // 255] for pixel in pixels.flatten()
+    )
+    return "\n".join(ascii_str[i : i + width] for i in range(0, len(ascii_str), width))
 
 
 @bot.command()
@@ -450,6 +420,7 @@ async def pixelate(ctx, intensity: int = 5):
 
 @bot.command()
 async def deepfry(ctx, intensity: int = 5):
+    await ctx.message.delete(delay=2)
     # Adjust intensity range to 1-50
     if not 1 <= intensity <= 50:
         await ctx.send("Intensity must be between 1 and 50.")
@@ -467,7 +438,8 @@ async def deepfry(ctx, intensity: int = 5):
     image.save(img_bytes, format="PNG")
     img_bytes.seek(0)
     file = File(img_bytes, filename="deepfried.png")
-    await ctx.send(f"Deepfried image (Intensity {intensity}):", file=file)
+    await ctx.send(f"Deepfried image", delete_after=2)
+    await ctx.send(file=file)
 
 
 def deepfry_image(image: Image.Image, scaled_intensity: float) -> Image.Image:
@@ -532,6 +504,23 @@ async def emojify(ctx, emoji_name: str = None):
     img_bytes.seek(0)
     file = File(img_bytes, filename="emoji_faces.png")
     await ctx.send(f"Image with `{emoji_name}` emoji faces:", file=file)
+
+
+def replace_faces_with_emoji(image: Image.Image, emoji_path: str) -> Image.Image:
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    faces = face_cascade.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+    )
+    emoji = Image.open(emoji_path).convert("RGBA")
+    for x, y, w, h in faces:
+        emoji_resized = emoji.resize((int(w * 1.2), int(h * 1.2)), Image.LANCZOS)
+        emoji_x = x + (w - emoji_resized.width) // 2
+        emoji_y = y + (h - emoji_resized.height) // 2
+        image.paste(emoji_resized, (emoji_x, emoji_y), emoji_resized)
+    return image
 
 
 @bot.command()
