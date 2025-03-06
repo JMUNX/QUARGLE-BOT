@@ -553,7 +553,7 @@ async def caption(ctx, top_text: str = "", bottom_text: str = ""):
         image = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
     draw = ImageDraw.Draw(image)
     width, height = image.size
-    font_path = "comicz.ttf"
+    font_path = "Impact.ttf"
     base_font_size = width // 15
     padding = 30
 
