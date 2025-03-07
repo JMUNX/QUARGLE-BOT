@@ -206,7 +206,7 @@ async def save_image_data(image: Image.Image, directory: str, filename: str) -> 
 async def clear(ctx, amount: int):
     await ctx.message.delete(delay=2)
     if amount > 200:
-        await ctx.send("I WON’T DELETE MORE THAN 200 MESSAGES!!!!", delete_after=2)
+        await ctx.send("Unable to delete more than 200 messages.", delete_after=2)
         return
     await ctx.send(f"Deleting {amount} messages...", delete_after=2)
     deleted = await ctx.channel.purge(limit=amount, bulk=True)
