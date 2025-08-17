@@ -85,7 +85,7 @@ async def on_ready():
     logger.info(f"Bot is online as {bot.user.name}")
     channel = bot.get_channel(1345184113623040051)
     if channel:
-        version = "69.420.51"
+        version = "69.420.52"
         embed = Embed(
             title="Quargle is online",
             description=f"{version} is now live",
@@ -222,7 +222,7 @@ async def clear_error(ctx, error):
 @bot.command()
 async def debug(ctx):
     await ctx.message.delete(delay=2)
-    await ctx.send("Debug", delete_after=5)
+    await ctx.send("Debug 2", delete_after=5)
 
 
 @bot.command()
